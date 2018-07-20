@@ -1,0 +1,53 @@
+{
+  "name": "roads4",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "webpack",
+    "lint": "eslint --ignore-path .gitignore .",
+    "start": "webpack-dev-server --host 0.0.0.0 --port 9003"
+  },
+  "author": "",
+  "license": "ISC",
+  "eslintConfig": {
+    "env": {
+      "browser": true,
+      "es6": true
+    }
+  },
+  "babel": {
+    "presets": [
+      [
+        "env",
+        {
+          "targets": {
+            "browsers": [
+              "last 2 versions"
+            ]
+          }
+        }
+      ]
+    ]
+  },
+  "dependencies": {
+    "eventemitter3": "^3.1.0",
+    "rxjs": "^6.2.2",
+    "three": "^0.94.0"
+  },
+  "devDependencies": {
+    "babel-cli": "",
+    "babel-core": "",
+    "babel-loader": "",
+    "babel-preset-env": "",
+    "eslint": "",
+    "eslint-config-standard": "",
+    "eslint-plugin-import": "",
+    "eslint-plugin-node": "",
+    "eslint-plugin-promise": "",
+    "eslint-plugin-standard": "",
+    "webpack": "",
+    "webpack-cli": "",
+    "webpack-dev-server": ""
+  }
+}
