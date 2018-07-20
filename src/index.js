@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import * as Rx from 'rxjs'
 import * as Op from 'rxjs/operators'
 import Road from './Road'
-import Marker from './Marker'
+import RoadBuilder from './RoadBuilder'
 
 const scene = new THREE.Scene()
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 5000)
@@ -18,8 +18,8 @@ const groundMaterial = new THREE.MeshBasicMaterial({ color: 0xaaaaaa, side: THRE
 const groundObject = new THREE.Mesh(groundGeometry, groundMaterial)
 scene.add(groundObject)
 
-const marker = new Marker()
-scene.add(marker.object)
+const roadBuilder = new RoadBuilder()
+scene.add(roadBuilder.object)
 
 camera.position.z = 500
 renderer.setSize(window.innerWidth, window.innerHeight - 50)
@@ -44,6 +44,13 @@ const onRightButton = function (event) {
   return false;
 }
 
+const handleStateTransition = function(prev, curr) {
+  if (prev.state === 'addRoad' && curr.state === 'null') {
+    return roadBuilder.cancel()
+  }
+  return curr
+}
+
 const animate = function () {
   requestAnimationFrame(animate)
   renderer.render(scene, camera)
@@ -52,29 +59,44 @@ const animate = function () {
 // Streams
 const mouseMove$ = Rx.fromEvent(canvas, 'mousemove')
 const click$ = Rx.fromEvent(canvas, 'click')
-const currentMousePosition$ = mouseMove$.pipe(Op.map(eventToPosition))
 const addRoadButton$ = Rx.fromEvent(addRoadButton, 'click')
 const cancelButton$ = Rx.fromEvent(cancelButton, 'click')
 const rightButton$ = Rx.fromEvent(canvas, 'contextmenu')
 const cancel$ = Rx.merge(cancelButton$, rightButton$)
 const state$ = new Rx.Observable(subscriber => {
-  addRoadButton$.subscribe(() => subscriber.next('addRoad'))
-  cancel$.subscribe(() => subscriber.next('cancel'))
-})
-const addRoadState$ = state$.pipe(Op.filter(state => 'addRoad' === state))
+  addRoadButton$.subscribe(() => subscriber.next({ state: 'addRoad', settings: { r: 3 } }))
+  cancel$.subscribe(() => subscriber.next({ state: 'null' }))
+}).pipe(Op.scan(handleStateTransition, { state: 'null' }))
+const distinctState$ = state$.pipe(Op.distinctUntilChanged((s1, s2) => s1.state === s2.state), Op.share())
+const addRoadState$ = distinctState$.pipe(Op.filter(s => s.state === 'addRoad'))
 
-addRoadState$.subscribe(() => {
-  const point$ = click$.pipe(
+addRoadState$.subscribe(state => {
+  console.log('Adding road: ', state)
+  const position$ = mouseMove$.pipe(
     Op.map(eventToPosition),
-    Op.takeUntil(cancel$),
+    // map snapping
+    Op.takeUntil(distinctState$)
+  )
+  const point$ = click$.pipe(
+    Op.withLatestFrom(position$),
+    Op.map(([ev, pos]) => pos),
+    Op.takeUntil(distinctState$),
     Op.share()
   )
-  marker.initCircle(3)
+  const settings$ = state$.pipe(
+    Op.takeWhile(s => s.state === 'addRoad'),
+    Op.startWith(state)
+  )
+  roadBuilder.setPositionStream(position$)
+  roadBuilder.setPointStream(point$)
+  roadBuilder.initCircle(3)
+
   const road = new Road()
   road.setPointStream(point$)
-  marker.setPointStream(point$)
+
   scene.add(road.object)
   point$.subscribe(undefined, undefined, () => {
+    console.log('Ending addRoad')
     if (road.isEmpty()) {
       scene.remove(road.object)
       console.log("Removed empty road")
@@ -82,7 +104,6 @@ addRoadState$.subscribe(() => {
   })
 })
 
-marker.setPositionsStream(currentMousePosition$)
 canvas.addEventListener('contextmenu', onRightButton)
 
 animate()

@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-export default class Marker {
+export default class RoadBuilder {
   constructor() {
     this._r = 0.1
     this._points = []
@@ -23,16 +23,21 @@ export default class Marker {
     this._object.visible = true
   }
 
-  setPointStream(point$) {
-    point$.subscribe(
-      this.nextPoint.bind(this),
-      () => {},
-      () => this.initCircle(this._r)
-    )
+  cancel() {
+    if (this._points.length === 0) {
+      this._object.visible = false
+      return { state: 'null' }
+    }
+    this.initCircle(3)
+    return { state: 'addRoad', settings: { r: this._r } }
   }
 
-  setPositionsStream(point$) {
-    point$.subscribe(this.movePoint.bind(this))
+  setPointStream(point$) {
+    point$.subscribe(this.nextPoint.bind(this))
+  }
+
+  setPositionStream(position$) {
+    position$.subscribe(this.movePoint.bind(this))
   }
 
   get object() {
