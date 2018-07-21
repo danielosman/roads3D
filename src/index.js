@@ -45,8 +45,12 @@ const onRightButton = function (event) {
 }
 
 const handleStateTransition = function(prev, curr) {
-  if (prev.state === 'addRoad' && curr.state === 'null') {
-    return roadBuilder.cancel()
+  if (prev.state === 'addRoad' && curr.state !== 'addRoad') {
+    if (curr.state === 'null') {
+      return roadBuilder.cancel()
+    } else {
+      roadBuilder.cancelAll()
+    }
   }
   return curr
 }
@@ -66,7 +70,7 @@ const cancel$ = Rx.merge(cancelButton$, rightButton$)
 const state$ = new Rx.Observable(subscriber => {
   addRoadButton$.subscribe(() => subscriber.next({ state: 'addRoad', settings: { r: 3 } }))
   cancel$.subscribe(() => subscriber.next({ state: 'null' }))
-}).pipe(Op.scan(handleStateTransition, { state: 'null' }))
+}).pipe(Op.scan(handleStateTransition, { state: 'null' }), Op.share())
 const distinctState$ = state$.pipe(Op.distinctUntilChanged((s1, s2) => s1.state === s2.state), Op.share())
 const addRoadState$ = distinctState$.pipe(Op.filter(s => s.state === 'addRoad'))
 
@@ -85,11 +89,12 @@ addRoadState$.subscribe(state => {
   )
   const settings$ = state$.pipe(
     Op.takeWhile(s => s.state === 'addRoad'),
-    Op.startWith(state)
+    Op.startWith(state),
+    Op.map(s => s.settings)
   )
+  roadBuilder.setSettingsStream(settings$)
   roadBuilder.setPositionStream(position$)
   roadBuilder.setPointStream(point$)
-  roadBuilder.initCircle(3)
 
   const road = new Road()
   road.setPointStream(point$)
