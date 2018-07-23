@@ -1,7 +1,6 @@
 import * as THREE from 'three'
 import * as Rx from 'rxjs'
 import * as Op from 'rxjs/operators'
-import Road from './Road'
 import RoadBuilder from './RoadBuilder'
 
 const scene = new THREE.Scene()
@@ -16,13 +15,15 @@ const planeIntersection = new THREE.Vector3()
 const groundGeometry = new THREE.PlaneGeometry(2000, 2000, 2, 2)
 const groundMaterial = new THREE.MeshBasicMaterial({ color: 0xaaaaaa, side: THREE.DoubleSide })
 const groundObject = new THREE.Mesh(groundGeometry, groundMaterial)
-scene.add(groundObject)
 
 const roadBuilder = new RoadBuilder()
-scene.add(roadBuilder.object)
+const roads = []
 
 camera.position.z = 500
 renderer.setSize(window.innerWidth, window.innerHeight - 50)
+
+scene.add(groundObject)
+scene.add(roadBuilder.object)
 
 // DOM
 const canvas = document.getElementById('canvas')
@@ -55,12 +56,28 @@ const handleStateTransition = function(prev, curr) {
   return curr
 }
 
-const animate = function () {
-  requestAnimationFrame(animate)
-  renderer.render(scene, camera)
+const snapToRoad = function(point) {
+  const minRet = { d: 9999999, i: -1, t: 0, p: null, point: point.clone() }
+  roads.forEach(road => {
+    const ret = road.distanceTo(point)
+    if (ret.d < minRet.d) {
+      minRet.d = ret.d
+      minRet.i = ret.i
+      minRet.t = ret.t
+      minRet.p = ret.p
+      minRet.road = road
+    }
+  })
+  if (minRet.d < 100) {
+    minRet.snapped = true
+  } else {
+    minRet.p = minRet.point
+  }
+  return minRet
 }
 
 // Streams
+const animation$ = Rx.interval(0, Rx.Scheduler.animationFrame)
 const mouseMove$ = Rx.fromEvent(canvas, 'mousemove')
 const click$ = Rx.fromEvent(canvas, 'click')
 const addRoadButton$ = Rx.fromEvent(addRoadButton, 'click')
@@ -71,14 +88,15 @@ const state$ = new Rx.Observable(subscriber => {
   addRoadButton$.subscribe(() => subscriber.next({ state: 'addRoad', settings: { r: 3 } }))
   cancel$.subscribe(() => subscriber.next({ state: 'null' }))
 }).pipe(Op.scan(handleStateTransition, { state: 'null' }), Op.share())
-const distinctState$ = state$.pipe(Op.distinctUntilChanged((s1, s2) => s1.state === s2.state), Op.share())
+const distinctState$ = state$.pipe(Op.distinctUntilKeyChanged('state'), Op.share())
 const addRoadState$ = distinctState$.pipe(Op.filter(s => s.state === 'addRoad'))
 
 addRoadState$.subscribe(state => {
-  console.log('Adding road: ', state)
+  console.log('Building road: ', state)
   const position$ = mouseMove$.pipe(
+    Op.sample(animation$),
     Op.map(eventToPosition),
-    // map snapping
+    Op.map(snapToRoad),
     Op.takeUntil(distinctState$)
   )
   const point$ = click$.pipe(
@@ -96,19 +114,14 @@ addRoadState$.subscribe(state => {
   roadBuilder.setPositionStream(position$)
   roadBuilder.setPointStream(point$)
 
-  const road = new Road()
-  road.setPointStream(point$)
-
-  scene.add(road.object)
-  point$.subscribe(undefined, undefined, () => {
-    console.log('Ending addRoad')
-    if (road.isEmpty()) {
-      scene.remove(road.object)
-      console.log("Removed empty road")
-    }
+  roadBuilder.roadStream.subscribe(road => {
+    scene.add(road.object)
+    roads.push(road)
   })
 })
 
-canvas.addEventListener('contextmenu', onRightButton)
+animation$.subscribe(() => {
+  renderer.render(scene, camera)
+})
 
-animate()
+canvas.addEventListener('contextmenu', onRightButton)
