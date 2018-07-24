@@ -58,13 +58,12 @@ const handleStateTransition = function(prev, curr) {
 
 const snapToRoad = function(point) {
   const minRet = { d: 9999999, i: -1, t: 0, p: null, point: point.clone() }
+  const p = new THREE.Vector2()
+  const projection = new THREE.Vector2()
   roads.forEach(road => {
-    const ret = road.distanceTo(point)
+    const ret = road.distanceTo(point, p, projection)
     if (ret.d < minRet.d) {
-      minRet.d = ret.d
-      minRet.i = ret.i
-      minRet.t = ret.t
-      minRet.p = ret.p
+      Object.assign(minRet, ret)
       minRet.road = road
     }
   })

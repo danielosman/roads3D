@@ -1,26 +1,28 @@
 import * as THREE from 'three'
 import * as Rx from 'rxjs'
+import SegmentOutline from './SegmentOutline'
 import Road from './Road'
 
-export default class RoadBuilder {
+export default class RoadBuilder extends SegmentOutline {
   constructor() {
-    this._settings = { r: 0.1 }
-    this._points = []
-    this._shape = new THREE.Shape()
-    this._lastPoint = new THREE.Vector2()
-    this._dir = new THREE.Vector2()
+    super()
     this._road = null
     this._road$ = new Rx.Subject()
 
-    const geometry = new THREE.CircleGeometry(this._settings.r, 16)
-    const material = new THREE.MeshBasicMaterial({ color : 0x2266ff, transparent: true, opacity: 0.5 })
+    this._segments.push({ dir: new THREE.Vector3(), per: new THREE.Vector3() })
+
+    const geometry = new THREE.CircleGeometry(this._settings.r, 24)
+    const material = new THREE.MeshBasicMaterial({ color : 0x4488ff, transparent: true, opacity: 0.66 })
     this._object = new THREE.Mesh(geometry, material)
     this._object.visible = false
   }
 
   _initCircle () {
-    this._object.geometry = new THREE.CircleGeometry(this._settings.r, 16)
-    this._object.position.set(this._lastPoint.x, this._lastPoint.y, 0.1)
+    this._object.geometry = new THREE.CircleGeometry(this._settings.r, 24)
+    const nOfPoints = this._points.length
+    if (nOfPoints > 0) {
+      this._object.position.set(this._points[nOfPoints - 1].x, this._points[nOfPoints - 1].y, 0.2)
+    }
     this._object.visible = true
   }
 
@@ -74,6 +76,7 @@ export default class RoadBuilder {
     } else if (nOfPoints === 2) {
       // Create new road.
       this._road = new Road()
+      this._road._settings.r = this._settings.r
       this._road.nextPoint(this._points[0])
       this._road.nextPoint(this._points[1])
       this._road$.next(this._road)
@@ -83,8 +86,9 @@ export default class RoadBuilder {
   movePoint(point) {
     const nOfPoints = this._points.length
     if (nOfPoints === 0) {
-      this._object.position.set(point.p.x, point.p.y, point.p.z + 0.1)
+      this._object.position.set(point.p.x, point.p.y, point.p.z + 0.2)
     } else {
+      /*
       this._shape.curves = []
       this._lastPoint.set(this._points[nOfPoints - 1].x, this._points[nOfPoints - 1].y)
       this._dir.set(point.p.x, point.p.y)
@@ -104,9 +108,12 @@ export default class RoadBuilder {
       this._shape.lineTo(p.x, p.y)
       p.addScaledVector(per, -this._settings.r)
       this._shape.autoClose = true
-
+      */
+      this.createSegment(nOfPoints - 1, point.p, this._segments[0])
+      this.createOutline(0, 0, this._outline)
+      this.rebuildShape()
       this._object.geometry = new THREE.ShapeGeometry(this._shape)
-      this._object.position.set(0, 0, 0.1)
+      this._object.position.set(0, 0, 0.2)
     }
   }
 }
