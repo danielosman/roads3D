@@ -2,16 +2,6 @@ import * as THREE from 'three'
 import SegmentOutline from './SegmentOutline'
 
 export default class Road extends SegmentOutline {
-  constructor() {
-    super()
-    const geometry = new THREE.CircleGeometry(1, 12)
-    const material = new THREE.MeshBasicMaterial({ color : 0x444444, wireframe: false })
-    this._object = new THREE.Mesh(geometry, material)
-  }
-
-  get object() {
-    return this._object
-  }
 
   /**
    * Computes minimum squared distance from the given point to this road.

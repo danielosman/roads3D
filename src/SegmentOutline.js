@@ -7,6 +7,37 @@ export default class SegmentOutline {
     this._segments = []
     this._outline = { f: [], b: [] }
     this._shape = new THREE.Shape()
+    this._initObject()
+  }
+
+  _initObject () {
+    const geometry = new THREE.CircleGeometry(1, 12)
+    const material = new THREE.MeshBasicMaterial({ color : 0x474747, wireframe: false })
+    this._object = new THREE.Mesh(geometry, material)
+  }
+
+  get object() {
+    return this._object
+  }
+
+  get r () {
+    return this._settings.r
+  }
+
+  set r (radius) {
+    this._settings.r = radius
+  }
+
+  getPoint (index) {
+    return this._points[index]
+  }
+
+  getSegment (index) {
+    return this._segments[index]
+  }
+
+  get numOfSegments () {
+    return this._segments.length
   }
 
   /**

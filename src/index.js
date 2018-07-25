@@ -13,28 +13,31 @@ const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1))
 const planeIntersection = new THREE.Vector3()
 
 const groundGeometry = new THREE.PlaneGeometry(2000, 2000, 2, 2)
-const groundMaterial = new THREE.MeshBasicMaterial({ color: 0xaaaaaa, side: THREE.DoubleSide })
+const groundMaterial = new THREE.MeshBasicMaterial({ color: 0xd4c5ad, side: THREE.DoubleSide })
 const groundObject = new THREE.Mesh(groundGeometry, groundMaterial)
 
 const roadBuilder = new RoadBuilder()
 const roads = []
+const buttonPanelHeight = 60
 
 camera.position.z = 500
-renderer.setSize(window.innerWidth, window.innerHeight - 50)
+renderer.setSize(window.innerWidth, window.innerHeight - buttonPanelHeight)
 
 scene.add(groundObject)
 scene.add(roadBuilder.object)
 
 // DOM
 const canvas = document.getElementById('canvas')
-const addRoadButton = document.getElementById('addRoadButton')
 const cancelButton = document.getElementById('cancelButton')
 canvas.appendChild(renderer.domElement)
+const stateButtons = {
+  addRoadButton: document.getElementById('addRoadButton')
+}
 
 // Functions
 const eventToPosition = function(event) {
   mouse.x = (event.clientX / window.innerWidth) * 2 - 1
-  mouse.y = -(event.clientY / (window.innerHeight - 50)) * 2 + 1
+  mouse.y = -(event.clientY / (window.innerHeight - buttonPanelHeight)) * 2 + 1
   raycaster.setFromCamera(mouse, camera)
   raycaster.ray.intersectPlane(plane, planeIntersection)
   return planeIntersection
@@ -75,11 +78,32 @@ const snapToRoad = function(point) {
   return minRet
 }
 
+const snapToNode = function(pos) {
+  if (!pos.snapped) return pos
+  if (pos.t < 2 * pos.road.r) {
+    pos.t = 0
+    pos.p = pos.road.getPoint(pos.i)
+    return pos
+  }
+  const segment = pos.road.getSegment(pos.i)
+  if (pos.t > segment.len - 2 * pos.road.r) {
+    pos.t = 0
+    pos.i += 1
+    pos.p = pos.road.getPoint(pos.i)
+    if (pos.i === pos.road.numOfSegments) {
+      pos.i -= 1
+      pos.t = segment.len
+    }
+    return pos
+  }
+  return pos
+}
+
 // Streams
 const animation$ = Rx.interval(0, Rx.Scheduler.animationFrame)
 const mouseMove$ = Rx.fromEvent(canvas, 'mousemove')
 const click$ = Rx.fromEvent(canvas, 'click')
-const addRoadButton$ = Rx.fromEvent(addRoadButton, 'click')
+const addRoadButton$ = Rx.fromEvent(stateButtons.addRoadButton, 'click')
 const cancelButton$ = Rx.fromEvent(cancelButton, 'click')
 const rightButton$ = Rx.fromEvent(canvas, 'contextmenu')
 const cancel$ = Rx.merge(cancelButton$, rightButton$)
@@ -96,6 +120,8 @@ addRoadState$.subscribe(state => {
     Op.sample(animation$),
     Op.map(eventToPosition),
     Op.map(snapToRoad),
+    Op.map(snapToNode),
+    Op.distinctUntilChanged((pos1, pos2) => pos1.p.x === pos2.p.x && pos1.p.y === pos2.p.y),
     Op.takeUntil(distinctState$)
   )
   const point$ = click$.pipe(
@@ -110,13 +136,22 @@ addRoadState$.subscribe(state => {
     Op.map(s => s.settings)
   )
   roadBuilder.setSettingsStream(settings$)
-  roadBuilder.setPositionStream(position$)
-  roadBuilder.setPointStream(point$)
+  roadBuilder.setChangePositionStream(position$)
+  roadBuilder.setNextPositionStream(point$)
 
   roadBuilder.roadStream.subscribe(road => {
     scene.add(road.object)
     roads.push(road)
   })
+})
+
+distinctState$.subscribe(s => {
+  Object.values(stateButtons).forEach(button => button.classList.remove('active'))
+  const buttonName = s.state + 'Button'
+  const button = stateButtons[buttonName]
+  if (button) {
+    button.classList.add('active')
+  }
 })
 
 animation$.subscribe(() => {

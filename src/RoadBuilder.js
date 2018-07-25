@@ -6,11 +6,13 @@ import Road from './Road'
 export default class RoadBuilder extends SegmentOutline {
   constructor() {
     super()
+    this._lastPoint = new THREE.Vector3()
     this._road = null
     this._road$ = new Rx.Subject()
-
     this._segments.push({ dir: new THREE.Vector3(), per: new THREE.Vector3() })
+  }
 
+  _initObject () {
     const geometry = new THREE.CircleGeometry(this._settings.r, 24)
     const material = new THREE.MeshBasicMaterial({ color : 0x4488ff, transparent: true, opacity: 0.66 })
     this._object = new THREE.Mesh(geometry, material)
@@ -19,15 +21,10 @@ export default class RoadBuilder extends SegmentOutline {
 
   _initCircle () {
     this._object.geometry = new THREE.CircleGeometry(this._settings.r, 24)
-    const nOfPoints = this._points.length
-    if (nOfPoints > 0) {
-      this._object.position.set(this._points[nOfPoints - 1].x, this._points[nOfPoints - 1].y, 0.2)
-    }
-    this._object.visible = true
+    this._object.position.copy(this._lastPoint)
   }
 
   cancel() {
-    console.log('road builder cancel')
     if (this._points.length === 0) {
       this._object.visible = false
       return { state: 'null' }
@@ -44,20 +41,16 @@ export default class RoadBuilder extends SegmentOutline {
     settings$.subscribe(this.settingsChanged.bind(this))
   }
 
-  setPointStream(point$) {
-    point$.subscribe(this.nextPoint.bind(this))
+  setNextPositionStream(point$) {
+    point$.subscribe(this.nextPosition.bind(this))
   }
 
-  setPositionStream(position$) {
-    position$.subscribe(this.movePoint.bind(this))
+  setChangePositionStream(position$) {
+    position$.subscribe(this.changePosition.bind(this))
   }
 
   get roadStream () {
     return this._road$
-  }
-
-  get object() {
-    return this._object
   }
 
   settingsChanged(settings) {
@@ -68,48 +61,32 @@ export default class RoadBuilder extends SegmentOutline {
     }
   }
 
-  nextPoint(point) {
-    this._points.push(point.p)
+  nextPosition(pos) {
+    this._object.visible = true
+    this._points.push(pos.p)
     const nOfPoints = this._points.length
+    this._initCircle()
     if (nOfPoints > 2) {
       this._road.nextPoint(this._points[nOfPoints - 1])
     } else if (nOfPoints === 2) {
       // Create new road.
       this._road = new Road()
-      this._road._settings.r = this._settings.r
+      this._road.r = this._settings.r
       this._road.nextPoint(this._points[0])
       this._road.nextPoint(this._points[1])
       this._road$.next(this._road)
     }
   }
 
-  movePoint(point) {
+  changePosition(pos) {
+    this._object.visible = true
+    this._lastPoint.set(pos.p.x, pos.p.y, pos.p.z + 0.2)
     const nOfPoints = this._points.length
     if (nOfPoints === 0) {
-      this._object.position.set(point.p.x, point.p.y, point.p.z + 0.2)
+      this._object.position.copy(this._lastPoint)
     } else {
-      /*
-      this._shape.curves = []
-      this._lastPoint.set(this._points[nOfPoints - 1].x, this._points[nOfPoints - 1].y)
-      this._dir.set(point.p.x, point.p.y)
-      this._dir.sub(this._lastPoint)
-      const len = this._dir.length()
-      const per = new THREE.Vector2(-this._dir.y, +this._dir.x)
-      per.divideScalar(len)
-      const p = new THREE.Vector2(this._lastPoint.x, this._lastPoint.y)
-      this._shape.moveTo(p.x, p.y)
-      p.addScaledVector(per, this._settings.r)
-      this._shape.lineTo(p.x, p.y)
-      p.add(this._dir)
-      this._shape.lineTo(p.x, p.y)
-      p.addScaledVector(per, -2 * this._settings.r)
-      this._shape.lineTo(p.x, p.y)
-      p.addScaledVector(this._dir, -1)
-      this._shape.lineTo(p.x, p.y)
-      p.addScaledVector(per, -this._settings.r)
-      this._shape.autoClose = true
-      */
-      this.createSegment(nOfPoints - 1, point.p, this._segments[0])
+      this.createSegment(nOfPoints - 1, pos.p, this._segments[0])
+      if (this._segments[0].len < 0.1) return
       this.createOutline(0, 0, this._outline)
       this.rebuildShape()
       this._object.geometry = new THREE.ShapeGeometry(this._shape)
