@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import * as Rx from 'rxjs'
 import SegmentOutline from './SegmentOutline'
 import Road from './Road'
+import Segment from './Segment'
 
 export default class RoadBuilder extends SegmentOutline {
   constructor() {
@@ -9,7 +10,7 @@ export default class RoadBuilder extends SegmentOutline {
     this._lastPoint = new THREE.Vector3()
     this._road = null
     this._road$ = new Rx.Subject()
-    this._segments.push({ dir: new THREE.Vector3(), per: new THREE.Vector3() })
+    this._segments.push(new Segment())
   }
 
   _initObject () {

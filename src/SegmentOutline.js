@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import Segment from './Segment'
 
 export default class SegmentOutline {
   constructor() {
@@ -43,14 +44,10 @@ export default class SegmentOutline {
   /**
    * Creates and returns a segment from points[index] to p or points[index + 1].
    */
-  createSegment (index, p, segment = { dir: new THREE.Vector3(), per: new THREE.Vector3() }) {
+  createSegment (index, p, segment = new Segment()) {
     const p0 = this._points[index]
     const p1 = p || this._points[index + 1]
-    segment.p = p0
-    segment.dir.subVectors(p1, p0)
-    segment.len = p0.distanceTo(p1)
-    segment.dir.divideScalar(segment.len)
-    segment.per.set(-segment.dir.y, +segment.dir.x, 0)
+    segment.setPoints(p0, p1)
     return segment
   }
 
@@ -83,8 +80,7 @@ export default class SegmentOutline {
       outline.b[i] = pPrev
     }
     const lastIndex = index1 + 1
-    p.set(this._segments[index1].p.x, this._segments[index1].p.y)
-    p.addScaledVector(this._segments[index1].dir, this._segments[index1].len)
+    p.copy(this._segments[index1].endPoint)
     p.addScaledVector(this._segments[index1].per, -this._settings.r)
     outline.f[lastIndex] = p.clone()
     p.addScaledVector(this._segments[index1].per, 2 * this._settings.r)
