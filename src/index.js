@@ -1,7 +1,9 @@
 import * as THREE from 'three'
 import * as Rx from 'rxjs'
 import * as Op from 'rxjs/operators'
-import RoadBuilder from './RoadBuilder'
+import RoadBuilder from './road/RoadBuilder'
+import IntersectionPoint from "./road/IntersectionPoint"
+import DesignedRoadSegmentView from "./road/DesignedRoadSegmentView"
 
 const scene = new THREE.Scene()
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 5000)
@@ -17,14 +19,14 @@ const groundMaterial = new THREE.MeshBasicMaterial({ color: 0xd4c5ad, side: THRE
 const groundObject = new THREE.Mesh(groundGeometry, groundMaterial)
 
 const roadBuilder = new RoadBuilder()
-const roads = []
+const roadSegments = []
+const roadSegmentNodes = []
 const buttonPanelHeight = 60
 
 camera.position.z = 500
 renderer.setSize(window.innerWidth, window.innerHeight - buttonPanelHeight)
 
 scene.add(groundObject)
-scene.add(roadBuilder.object)
 
 // DOM
 const canvas = document.getElementById('canvas')
@@ -48,37 +50,15 @@ const onRightButton = function (event) {
   return false;
 }
 
-const handleStateTransition = function(prev, curr) {
-  if (prev.state === 'addRoad' && curr.state !== 'addRoad') {
-    if (curr.state === 'null') {
-      return roadBuilder.cancel()
-    } else {
-      roadBuilder.cancelAll()
-    }
-  }
-  return curr
+const prepareIntersectionPoint = function(point) {
+  return IntersectionPoint.initMinPoint(point)
 }
 
-const snapToRoad = function(point) {
-  const minRet = { d: 9999999, i: -1, t: 0, p: null, point: point.clone() }
-  const p = new THREE.Vector2()
-  const projection = new THREE.Vector2()
-  roads.forEach(road => {
-    const ret = road.distanceTo(point, p, projection)
-    if (ret.d < minRet.d) {
-      Object.assign(minRet, ret)
-      minRet.road = road
-    }
-  })
-  if (minRet.d < 100) {
-    minRet.snapped = true
-  } else {
-    minRet.p = minRet.point
-  }
-  return minRet
+const snapToRoadSegment = function(intersectionPoint) {
+  return roadSegments.reduce((minPoint, segment) => segment.distanceTo(intersectionPoint.originalPoint, minPoint), intersectionPoint)
 }
 
-const snapToNode = function(pos) {
+const snapToNode = function (intersectionPoint) {
   if (!pos.snapped) return pos
   if (pos.t < 2 * pos.road.r) {
     pos.t = 0
@@ -100,51 +80,90 @@ const snapToNode = function(pos) {
 }
 
 // Streams
+const designedSegmentRender$ = new Rx.Subject()
 const animation$ = Rx.interval(0, Rx.Scheduler.animationFrame)
 const mouseMove$ = Rx.fromEvent(canvas, 'mousemove')
 const click$ = Rx.fromEvent(canvas, 'click')
-const addRoadButton$ = Rx.fromEvent(stateButtons.addRoadButton, 'click')
+const addRoadButton$ = Rx.fromEvent(stateButtons.addRoadButton, 'click').pipe(Op.mapTo('addRoad'))
 const cancelButton$ = Rx.fromEvent(cancelButton, 'click')
 const rightButton$ = Rx.fromEvent(canvas, 'contextmenu')
-const cancel$ = Rx.merge(cancelButton$, rightButton$)
-const state$ = new Rx.Observable(subscriber => {
-  addRoadButton$.subscribe(() => subscriber.next({ state: 'addRoad', settings: { r: 3 } }))
-  cancel$.subscribe(() => subscriber.next({ state: 'null' }))
-}).pipe(Op.scan(handleStateTransition, { state: 'null' }), Op.share())
+const cancel$ = Rx.merge(cancelButton$, rightButton$).pipe(Op.mapTo('null'))
+const state$ = Rx.merge(addRoadButton$, cancel$).pipe(
+  Op.startWith('null'),
+  Op.map(state => ({ state })),
+  Op.pairwise(),
+  Op.map(roadBuilder.handleStateTransition.bind(roadBuilder)),
+  Op.share()
+)
 const distinctState$ = state$.pipe(Op.distinctUntilKeyChanged('state'), Op.share())
 const addRoadState$ = distinctState$.pipe(Op.filter(s => s.state === 'addRoad'))
 
 addRoadState$.subscribe(state => {
   console.log('Building road: ', state)
-  const position$ = mouseMove$.pipe(
+  const designedSegmentFromMove$ = mouseMove$.pipe(
     Op.sample(animation$),
     Op.map(eventToPosition),
-    Op.map(snapToRoad),
-    Op.map(snapToNode),
-    Op.distinctUntilChanged((pos1, pos2) => pos1.p.x === pos2.p.x && pos1.p.y === pos2.p.y),
+    Op.map(prepareIntersectionPoint),
+    Op.map(snapToRoadSegment),
+    // Op.map(snapToNode),
+    // Op.distinctUntilChanged((pos1, pos2) => pos1.p.x === pos2.p.x && pos1.p.y === pos2.p.y),
+    Op.map(roadBuilder.confirmSnap.bind(roadBuilder)),
+    Op.map(roadBuilder.modifyRoadSegment.bind(roadBuilder)),
+    // Op.map(check for collisions)
     Op.takeUntil(distinctState$)
   )
+  const designedSegmentFromState$ = state$.pipe(
+    Op.mapTo(roadBuilder.designedRoadSegment),
+    Op.tap(s => console.log('Segment from state change: ', s)),
+    Op.takeUntil(distinctState$)
+  )
+  const newStep$ = click$.pipe(
+    Op.mapTo(roadBuilder.designedRoadSegment),
+    Op.map(roadBuilder.addStep.bind(roadBuilder)),
+    Op.takeUntil(distinctState$)
+  )
+  const designedSegmentFromClick$ = newStep$.pipe(
+    Op.pluck('designedSegment'),
+    Op.tap(s => console.log('Segment from click: ', s)),
+  )
+  const designedSegment$ = Rx.merge(designedSegmentFromMove$, designedSegmentFromState$, designedSegmentFromClick$)
+  /*
   const point$ = click$.pipe(
     Op.withLatestFrom(position$),
     Op.map(([ev, pos]) => pos),
     Op.takeUntil(distinctState$),
     Op.share()
   )
-  const settings$ = state$.pipe(
-    Op.takeWhile(s => s.state === 'addRoad'),
-    Op.startWith(state),
-    Op.map(s => s.settings)
-  )
-  roadBuilder.setSettingsStream(settings$)
-  roadBuilder.setChangePositionStream(position$)
-  roadBuilder.setNextPositionStream(point$)
-
+  */
+  // Send designed segment to the rendering stream.
+  designedSegment$.subscribe(designedSegment => designedSegmentRender$.next(designedSegment), undefined, () => designedSegmentRender$.next(null))
+  /*
   roadBuilder.roadStream.subscribe(road => {
     scene.add(road.object)
     roads.push(road)
   })
+  */
+  /*
+  segment$.subscribe(roadSegment => {
+    console.log('built road segment: ', roadSegment)
+  })
+  */
 })
 
+designedSegmentRender$.pipe(
+  Op.scan((designedSegmentView, designedSegment) => {
+    let view = designedSegmentView
+    if (view !== null) {
+      view.buildObject(designedSegment)
+    } else if (designedSegment !== null) {
+      view = new DesignedRoadSegmentView(designedSegment)
+      scene.add(view.object)
+    }
+    return view
+  }, null)
+).subscribe()
+
+// Activate the action buttons.
 distinctState$.subscribe(s => {
   Object.values(stateButtons).forEach(button => button.classList.remove('active'))
   const buttonName = s.state + 'Button'

@@ -3,7 +3,7 @@ import Segment from './Segment'
 
 export default class SegmentOutline {
   constructor() {
-    this._settings = { r: 0.1 }
+    this._settings = { r: 6 }
     this._points = []
     this._segments = []
     this._outline = { f: [], b: [] }
