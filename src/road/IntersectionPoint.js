@@ -7,6 +7,8 @@ export default class IntersectionPoint {
 
   init () {
     this._snapped = false
+    this._isNode = false
+    this._isSegment = false
     this._segment = null
     this._t = -1
     this._d = 9999999
@@ -19,6 +21,8 @@ export default class IntersectionPoint {
   clone () {
     const newIntersectionPoint = new IntersectionPoint()
     newIntersectionPoint._snapped = this._snapped
+    newIntersectionPoint._isNode = this._isNode
+    newIntersectionPoint._isSegment = this._isSegment
     newIntersectionPoint._segment = this._segment
     newIntersectionPoint._t = this._t
     newIntersectionPoint._d = this._d
@@ -66,6 +70,8 @@ export default class IntersectionPoint {
   }
 
   set segment (segment) {
+    this._isNode = false
+    this._isSegment = true
     this._segment = segment
   }
 
@@ -81,12 +87,26 @@ export default class IntersectionPoint {
     this._i = i
   }
 
+  set node (node) {
+    this._isNode = true
+    this._isSegment = false
+    this._node = node
+  }
+
   set p (point) {
     this._point = point
   }
 
   set originalPoint (point) {
     this._originalPoint = point
+  }
+
+  get isNode () {
+    return this._isNode
+  }
+
+  get isSegment () {
+    return this._isSegment
   }
 
   static initMinPoint (originalPoint) {

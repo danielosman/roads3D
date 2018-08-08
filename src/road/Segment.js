@@ -10,6 +10,16 @@ export default class Segment {
     this._per = new THREE.Vector3()
   }
 
+  clone () {
+    const ret = new Segment()
+    if (this._p0) ret._p0 = this._p0.clone()
+    if (this._p1) ret._p1 = this._p1.clone()
+    ret._len = this._len
+    ret._dir.copy(this._dir)
+    ret._per.copy(this._per)
+    return ret
+  }
+
   reset () {
     this._len = -1
   }
@@ -30,7 +40,7 @@ export default class Segment {
     return a / b
   }
 
-  distanceTo (point, distanceMod, ret, callWhenFound) {
+  distanceToSquared (point, distanceMod, ret, callWhenFound) {
     const p = IntersectionPoint.p
     const projection = IntersectionPoint.projection
     p.set(point.x, point.y)

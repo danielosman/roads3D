@@ -4,6 +4,7 @@ import * as Op from 'rxjs/operators'
 import RoadBuilder from './road/RoadBuilder'
 import IntersectionPoint from "./road/IntersectionPoint"
 import DesignedRoadSegmentView from "./road/DesignedRoadSegmentView"
+import RoadSegmentView from "./road/RoadSegmentView"
 
 const scene = new THREE.Scene()
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 5000)
@@ -55,32 +56,23 @@ const prepareIntersectionPoint = function(point) {
 }
 
 const snapToRoadSegment = function(intersectionPoint) {
-  return roadSegments.reduce((minPoint, segment) => segment.distanceTo(intersectionPoint.originalPoint, minPoint), intersectionPoint)
+  return roadSegments.reduce((minPoint, segment) => segment.distanceToSquared(intersectionPoint.originalPoint, minPoint), intersectionPoint)
 }
 
 const snapToNode = function (intersectionPoint) {
-  if (!pos.snapped) return pos
-  if (pos.t < 2 * pos.road.r) {
-    pos.t = 0
-    pos.p = pos.road.getPoint(pos.i)
-    return pos
+  return roadSegmentNodes.reduce((minPoint, node) => node.distanceToSquared(intersectionPoint.originalPoint, minPoint), intersectionPoint)
+}
+
+const enlistRoadSegmentNode = function (node) {
+  if (!node.enlisted) {
+    roadSegmentNodes.push(node)
+    node.enlisted = true
   }
-  const segment = pos.road.getSegment(pos.i)
-  if (pos.t > segment.len - 2 * pos.road.r) {
-    pos.t = 0
-    pos.i += 1
-    pos.p = pos.road.getPoint(pos.i)
-    if (pos.i === pos.road.numOfSegments) {
-      pos.i -= 1
-      pos.t = segment.len
-    }
-    return pos
-  }
-  return pos
 }
 
 // Streams
 const designedSegmentRender$ = new Rx.Subject()
+const newRoadSegmentRender$ = new Rx.Subject()
 const animation$ = Rx.interval(0, Rx.Scheduler.animationFrame)
 const mouseMove$ = Rx.fromEvent(canvas, 'mousemove')
 const click$ = Rx.fromEvent(canvas, 'click')
@@ -105,7 +97,7 @@ addRoadState$.subscribe(state => {
     Op.map(eventToPosition),
     Op.map(prepareIntersectionPoint),
     Op.map(snapToRoadSegment),
-    // Op.map(snapToNode),
+    Op.map(snapToNode),
     // Op.distinctUntilChanged((pos1, pos2) => pos1.p.x === pos2.p.x && pos1.p.y === pos2.p.y),
     Op.map(roadBuilder.confirmSnap.bind(roadBuilder)),
     Op.map(roadBuilder.modifyRoadSegment.bind(roadBuilder)),
@@ -113,54 +105,44 @@ addRoadState$.subscribe(state => {
     Op.takeUntil(distinctState$)
   )
   const designedSegmentFromState$ = state$.pipe(
-    Op.mapTo(roadBuilder.designedRoadSegment),
-    Op.tap(s => console.log('Segment from state change: ', s)),
+    Op.map(() => roadBuilder.designedRoadSegment),
     Op.takeUntil(distinctState$)
   )
   const newStep$ = click$.pipe(
-    Op.mapTo(roadBuilder.designedRoadSegment),
+    Op.map(() => roadBuilder.designedRoadSegment),
     Op.map(roadBuilder.addStep.bind(roadBuilder)),
-    Op.takeUntil(distinctState$)
-  )
-  const designedSegmentFromClick$ = newStep$.pipe(
-    Op.pluck('designedSegment'),
-    Op.tap(s => console.log('Segment from click: ', s)),
-  )
-  const designedSegment$ = Rx.merge(designedSegmentFromMove$, designedSegmentFromState$, designedSegmentFromClick$)
-  /*
-  const point$ = click$.pipe(
-    Op.withLatestFrom(position$),
-    Op.map(([ev, pos]) => pos),
     Op.takeUntil(distinctState$),
     Op.share()
   )
-  */
+  const designedSegmentFromClick$ = newStep$.pipe(
+    Op.pluck('designedSegment')
+  )
+  const designedSegment$ = Rx.merge(designedSegmentFromMove$, designedSegmentFromState$, designedSegmentFromClick$)
+
   // Send designed segment to the rendering stream.
   designedSegment$.subscribe(designedSegment => designedSegmentRender$.next(designedSegment), undefined, () => designedSegmentRender$.next(null))
-  /*
-  roadBuilder.roadStream.subscribe(road => {
-    scene.add(road.object)
-    roads.push(road)
-  })
-  */
-  /*
-  segment$.subscribe(roadSegment => {
-    console.log('built road segment: ', roadSegment)
-  })
-  */
+
+  newStep$.pipe(
+    Op.pluck('newRoadSegments'),
+    Op.filter(arr => arr && arr.length),
+    Op.concatMap(arr => Rx.from(arr))
+  ).subscribe(roadSegment => newRoadSegmentRender$.next(roadSegment))
 })
 
+const designedSegmentView$ = Rx.of(new DesignedRoadSegmentView()).pipe(
+  Op.tap(view => scene.add(view.object))
+)
 designedSegmentRender$.pipe(
-  Op.scan((designedSegmentView, designedSegment) => {
-    let view = designedSegmentView
-    if (view !== null) {
-      view.buildObject(designedSegment)
-    } else if (designedSegment !== null) {
-      view = new DesignedRoadSegmentView(designedSegment)
-      scene.add(view.object)
-    }
-    return view
-  }, null)
+  Op.withLatestFrom(designedSegmentView$, (designedSegment, view) => view.buildObject(designedSegment))
+).subscribe()
+
+newRoadSegmentRender$.pipe(
+  Op.tap(roadSegment => roadSegment.nodes.forEach(enlistRoadSegmentNode)),
+  Op.tap(roadSegment => {
+    console.log('Built RoadSegment: ', roadSegment)
+    const view = new RoadSegmentView(roadSegment)
+    scene.add(view.object)
+  })
 ).subscribe()
 
 // Activate the action buttons.
