@@ -55,6 +55,7 @@ export default class RoadSegment {
       // Fix all nodes of builtRoadSegment
       // Fix all roadSegments of these nodes
       ret.newRoadSegments = [builtRoadSegment]
+      ret.newRoadSegmentNodes = builtRoadSegment.nodes
       const newDesignedSegment = new RoadSegment()
       newDesignedSegment.setNodes(builtRoadSegment.lastNode, builtRoadSegment.lastNode.clone())
       newDesignedSegment.r = this.r

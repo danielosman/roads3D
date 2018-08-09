@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import IntersectionPoint from "./IntersectionPoint"
 
-export default class Segment {
+class Segment {
   constructor () {
     this._p0 = null
     this._p1 = null
@@ -24,6 +24,10 @@ export default class Segment {
     this._len = -1
   }
 
+  initP0 () {
+    this._p0 = new THREE.Vector3()
+  }
+
   setNodes (p0, p1) {
     this._p0 = p0
     this._p1 = p1
@@ -36,8 +40,14 @@ export default class Segment {
     const dx = this.p0.x - segment.p0.x
     const dy = this.p0.y - segment.p0.y
     const b = this.dir.x * segment.dir.y - this.dir.y * segment.dir.x
+    if (b < 0.001 && b > -0.001) return 0
     const a = segment.dir.x * dy - segment.dir.y * dx
     return a / b
+  }
+
+  pointAt (t, point) {
+    point.copy(this._p0)
+    point.addScaledVector(this._dir, t)
   }
 
   distanceToSquared (point, distanceMod, ret, callWhenFound) {
@@ -82,4 +92,23 @@ export default class Segment {
   get len () {
     return this._len
   }
+
+  static borderA (p, dirV, r) {
+    Segment._borderA.p0.set(p.x - dirV.y * r, p.y + dirV.x * r, p.z)
+    Segment._borderA.dir.set(dirV.x, dirV.y, 0)
+    return Segment._borderA
+  }
+
+  static borderB (p, dirV, r) {
+    Segment._borderB.p0.set(p.x - dirV.y * r, p.y + dirV.x * r, p.z)
+    Segment._borderB.dir.set(dirV.x, dirV.y, 0)
+    return Segment._borderB
+  }
 }
+
+Segment._borderA = new Segment()
+Segment._borderA.initP0()
+Segment._borderB = new Segment()
+Segment._borderB.initP0()
+
+export default Segment

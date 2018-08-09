@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import SegmentNodeDir from "./SegmentNodeDir"
+import Segment from "./Segment"
 
 export default class SegmentNode {
   constructor() {
@@ -7,7 +8,9 @@ export default class SegmentNode {
     this._rSquared = 0
     this._point = new THREE.Vector3()
     this._snapPoint = null
-    this._segmentDir = []
+    this._segmentDirs = []
+
+    this._view = null
   }
 
   clone () {
@@ -45,11 +48,46 @@ export default class SegmentNode {
     if (this._rSquared < roadSegment.rSquared) {
       this._rSquared = roadSegment.rSquared
     }
-    this._segmentDir.push(new SegmentNodeDir(dir, roadSegment))
+    const segmentDir = new SegmentNodeDir(dir, roadSegment)
+    segmentDir.computeParams()
+    this._segmentDirs.push(segmentDir)
+    this.computeAlongs()
+  }
+
+  computeAlongs () {
+    this._segmentDirs.sort((a, b) => a.bearing - b.bearing)
+    this._segmentDirs.forEach((segmentDir, i) => {
+      const nextSegmentDir = (i + 1 >= this._segmentDirs.length) ? this._segmentDirs[0] : this._segmentDirs[i + 1]
+      const borderA = Segment.borderA(this.p, segmentDir.dirV, segmentDir.segment.r)
+      const borderB = Segment.borderB(this.p, nextSegmentDir.dirV, -nextSegmentDir.segment.r)
+      const t1 = borderA.intersect(borderB)
+      const t0 = borderB.intersect(borderA)
+      segmentDir.alongs[1] = t1
+      nextSegmentDir.alongs[0] = t0
+    })
+    this._segmentDirs.forEach(segmentDir => {
+      segmentDir.along = Math.max(segmentDir.alongs[0], segmentDir.alongs[1]) + 10
+      const borderA = Segment.borderA(this.p, segmentDir.dirV, segmentDir.segment.r)
+      const borderB = Segment.borderB(this.p, segmentDir.dirV, -segmentDir.segment.r)
+      borderA.pointAt(segmentDir.along, segmentDir.alongPoints[1])
+      borderB.pointAt(segmentDir.along, segmentDir.alongPoints[0])
+    })
   }
 
   get p () {
     return this._point
+  }
+
+  set view (view) {
+    this._view = view
+  }
+
+  get view () {
+    return this._view
+  }
+
+  get segmentDirs () {
+    return this._segmentDirs
   }
 
   modifyFromSnapPoint (snapPoint) {

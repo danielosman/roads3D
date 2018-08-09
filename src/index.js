@@ -5,6 +5,7 @@ import RoadBuilder from './road/RoadBuilder'
 import IntersectionPoint from "./road/IntersectionPoint"
 import DesignedRoadSegmentView from "./road/DesignedRoadSegmentView"
 import RoadSegmentView from "./road/RoadSegmentView"
+import SegmentNodeView from "./road/SegmentNodeView"
 
 const scene = new THREE.Scene()
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 5000)
@@ -73,6 +74,7 @@ const enlistRoadSegmentNode = function (node) {
 // Streams
 const designedSegmentRender$ = new Rx.Subject()
 const newRoadSegmentRender$ = new Rx.Subject()
+const newRoadSegmentNodeRender$ = new Rx.Subject()
 const animation$ = Rx.interval(0, Rx.Scheduler.animationFrame)
 const mouseMove$ = Rx.fromEvent(canvas, 'mousemove')
 const click$ = Rx.fromEvent(canvas, 'click')
@@ -127,6 +129,12 @@ addRoadState$.subscribe(state => {
     Op.filter(arr => arr && arr.length),
     Op.concatMap(arr => Rx.from(arr))
   ).subscribe(roadSegment => newRoadSegmentRender$.next(roadSegment))
+
+  newStep$.pipe(
+    Op.pluck('newRoadSegmentNodes'),
+    Op.filter(arr => arr && arr.length),
+    Op.concatMap(arr => Rx.from(arr))
+  ).subscribe(roadSegmentNode => newRoadSegmentNodeRender$.next(roadSegmentNode))
 })
 
 const designedSegmentView$ = Rx.of(new DesignedRoadSegmentView()).pipe(
@@ -140,7 +148,16 @@ newRoadSegmentRender$.pipe(
   Op.tap(roadSegment => roadSegment.nodes.forEach(enlistRoadSegmentNode)),
   Op.tap(roadSegment => {
     console.log('Built RoadSegment: ', roadSegment)
-    const view = new RoadSegmentView(roadSegment)
+    const view = roadSegment.view || new RoadSegmentView()
+    view.buildObject(roadSegment)
+    scene.add(view.object)
+  })
+).subscribe()
+
+newRoadSegmentNodeRender$.pipe(
+  Op.tap(roadSegmentNode => {
+    const view = roadSegmentNode.view || new SegmentNodeView()
+    view.buildObject(roadSegmentNode)
     scene.add(view.object)
   })
 ).subscribe()

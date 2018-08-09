@@ -19,6 +19,7 @@ export default class RoadSegmentViewBase {
       return
     }
     this._model = model
+    model.view = this
     this._object.visible = true
     const isCircle = this._model.segment.len <= 0
     if (isCircle) {
