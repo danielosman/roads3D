@@ -1,9 +1,11 @@
 import Segment from "./Segment"
 import SegmentNode from "./SegmentNode"
+import * as THREE from "three"
 
 export default class RoadSegment {
   constructor() {
-    this._node = [null, null]
+    this._id = THREE.Math.generateUUID()
+    this._nodes = [null, null]
     this._segment = new Segment()
     this._r = 3
     this._rSquared = 9
@@ -13,7 +15,7 @@ export default class RoadSegment {
 
   clone () {
     const ret = new RoadSegment()
-    this._node.forEach((n, i) => ret._node[i] = n)
+    this._nodes.forEach((n, i) => ret._nodes[i] = n)
     ret._segment = this._segment.clone()
     ret._r = this._r
     ret._rSquared = this._rSquared
@@ -21,19 +23,19 @@ export default class RoadSegment {
   }
 
   setNodes (n0, n1) {
-    this._node[0] = n0
-    this._node[1] = n1
-    this._segment.setNodes(this._node[0].p, this._node[1].p)
+    this._nodes[0] = n0
+    this._nodes[1] = n1
+    this._segment.setNodes(this._nodes[0].p, this._nodes[1].p)
   }
 
   buildSegment () {
     if (this.allNodesExist) {
-      this._segment.setNodes(this._node[0].p, this._node[1].p)
+      this._segment.setNodes(this._nodes[0].p, this._nodes[1].p)
     }
   }
 
   commitSegment () {
-    this._node[1] = this._node[1].actualNode()
+    this._nodes[1] = this._nodes[1].actualNode()
     const builtRoadSegment = this.clone()
     builtRoadSegment.nodes[0].addDir(+1, builtRoadSegment)
     builtRoadSegment.nodes[1].addDir(-1, builtRoadSegment)
@@ -42,19 +44,20 @@ export default class RoadSegment {
 
   addStep () {
     const ret = {}
-    if (this._node[0] === null) {
-      this._node[0] = new SegmentNode()
+    if (this._nodes[0] === null) {
+      this._nodes[0] = new SegmentNode()
       ret.designedSegment = this
-    } else if(this._node[1] === null) {
-      this._node[0] = this._node[0].actualNode()
-      this._node[1] = this._node[0].clone()
+    } else if(this._nodes[1] === null) {
+      this._nodes[0] = this._nodes[0].actualNode()
+      this._nodes[1] = this._nodes[0].clone()
       ret.designedSegment = this
     } else if (this.allNodesExist) {
+      // Create builtRoadSegment with fixed nodes
       const builtRoadSegment = this.commitSegment()
       // Split existing roads if node.snapPoint.isSegment
-      // Fix all nodes of builtRoadSegment
-      // Fix all roadSegments of these nodes
-      ret.newRoadSegments = [builtRoadSegment]
+      ret.removedRoadSegments = builtRoadSegment.splitNeighbours()
+      ret.newRoadSegments = builtRoadSegment.relatedSegments
+      // Fix lengths of all ret.newRoadSegments
       ret.newRoadSegmentNodes = builtRoadSegment.nodes
       const newDesignedSegment = new RoadSegment()
       newDesignedSegment.setNodes(builtRoadSegment.lastNode, builtRoadSegment.lastNode.clone())
@@ -64,10 +67,38 @@ export default class RoadSegment {
     return ret
   }
 
+  splitNeighbours () {
+    const splitSegments = []
+    this._nodes.forEach((n, i) => {
+      const snapPoint = n.snapPoint
+      if (snapPoint && snapPoint.isSegment) {
+        console.log('Splitting segment: ', snapPoint.segment)
+        splitSegments.push(snapPoint.segment)
+        const s1 = new RoadSegment()
+        s1.r = this.r
+        s1.setNodes(snapPoint.segment.firstNode, n)
+        s1.nodes[0].addDir(+1, s1)
+        s1.nodes[1].addDir(-1, s1)
+        const s2 = new RoadSegment()
+        s2.r = this.r
+        s2.setNodes(n, snapPoint.segment.lastNode)
+        s2.nodes[0].addDir(+1, s2)
+        s2.nodes[1].addDir(-1, s2)
+        snapPoint.segment.remove()
+      }
+      n.removeSnapPoint()
+    })
+    return splitSegments
+  }
+
+  remove () {
+    this._nodes.forEach(n => n.removeSegment(this))
+  }
+
   revertLastStep () {
     console.log('Reverting last step: ', this)
-    this._node[0] = this._node[1]
-    this._node[1] = null
+    this._nodes[0] = this._nodes[1]
+    this._nodes[1] = null
     this._segment.reset()
   }
 
@@ -76,33 +107,33 @@ export default class RoadSegment {
   }
 
   get allNodesExist () {
-    return this._node[0] !== null && this._node[1] !== null
+    return this._nodes[0] !== null && this._nodes[1] !== null
   }
 
   get numberOfExistingNodes () {
-    return this._node.filter(n => n !== null).length
+    return this._nodes.filter(n => n !== null).length
   }
 
   get lastExistingNode () {
-    if (this._node[0] === null) return null
-    if (this._node[1] !== null) return this._node[1]
-    return this._node[0]
+    if (this._nodes[0] === null) return null
+    if (this._nodes[1] !== null) return this._nodes[1]
+    return this._nodes[0]
   }
 
   set lastNode (lastNode) {
-    this._node[1] = lastNode
+    this._nodes[1] = lastNode
   }
 
   get lastNode () {
-    return this._node[1]
+    return this._nodes[1]
   }
 
   set firstNode (firstNode) {
-    this._node[0] = firstNode
+    this._nodes[0] = firstNode
   }
 
   get firstNode () {
-    return this._node[0]
+    return this._nodes[0]
   }
 
   set r (r) {
@@ -123,7 +154,19 @@ export default class RoadSegment {
   }
 
   get nodes () {
-    return this._node
+    return this._nodes
+  }
+
+  get relatedSegments () {
+    const gatheredSegments = [this]
+    this._nodes.forEach(n => {
+      n.segmentDirs.forEach(sd => {
+        if (!gatheredSegments.find(gs => gs._id === sd.segment._id)) {
+          gatheredSegments.push(sd.segment)
+        }
+      })
+    })
+    return gatheredSegments
   }
 
   get rSquared () {

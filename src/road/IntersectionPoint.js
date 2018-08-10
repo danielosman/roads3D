@@ -27,7 +27,7 @@ export default class IntersectionPoint {
     newIntersectionPoint._t = this._t
     newIntersectionPoint._d = this._d
     newIntersectionPoint._i = this._i
-    newIntersectionPoint._node = this._node
+    newIntersectionPoint._nodes = this._node
     newIntersectionPoint._point.copy(this._point)
     if (this._originalPoint !== null) newIntersectionPoint._originalPoint = this._originalPoint.clone()
     return newIntersectionPoint

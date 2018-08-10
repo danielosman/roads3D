@@ -57,11 +57,19 @@ const prepareIntersectionPoint = function(point) {
 }
 
 const snapToRoadSegment = function(intersectionPoint) {
+  if (intersectionPoint.snapped) return intersectionPoint
   return roadSegments.reduce((minPoint, segment) => segment.distanceToSquared(intersectionPoint.originalPoint, minPoint), intersectionPoint)
 }
 
 const snapToNode = function (intersectionPoint) {
   return roadSegmentNodes.reduce((minPoint, node) => node.distanceToSquared(intersectionPoint.originalPoint, minPoint), intersectionPoint)
+}
+
+const enlistRoadSegment = function (segment) {
+  if (!segment.enlisted) {
+    roadSegments.push(segment)
+    segment.enlisted = true
+  }
 }
 
 const enlistRoadSegmentNode = function (node) {
@@ -98,8 +106,9 @@ addRoadState$.subscribe(state => {
     Op.sample(animation$),
     Op.map(eventToPosition),
     Op.map(prepareIntersectionPoint),
-    Op.map(snapToRoadSegment),
     Op.map(snapToNode),
+    Op.map(roadBuilder.confirmSnap.bind(roadBuilder)),
+    Op.map(snapToRoadSegment),
     // Op.distinctUntilChanged((pos1, pos2) => pos1.p.x === pos2.p.x && pos1.p.y === pos2.p.y),
     Op.map(roadBuilder.confirmSnap.bind(roadBuilder)),
     Op.map(roadBuilder.modifyRoadSegment.bind(roadBuilder)),
@@ -145,7 +154,7 @@ designedSegmentRender$.pipe(
 ).subscribe()
 
 newRoadSegmentRender$.pipe(
-  Op.tap(roadSegment => roadSegment.nodes.forEach(enlistRoadSegmentNode)),
+  Op.tap(enlistRoadSegment),
   Op.tap(roadSegment => {
     console.log('Built RoadSegment: ', roadSegment)
     const view = roadSegment.view || new RoadSegmentView()
@@ -155,6 +164,7 @@ newRoadSegmentRender$.pipe(
 ).subscribe()
 
 newRoadSegmentNodeRender$.pipe(
+  Op.tap(enlistRoadSegmentNode),
   Op.tap(roadSegmentNode => {
     const view = roadSegmentNode.view || new SegmentNodeView()
     view.buildObject(roadSegmentNode)

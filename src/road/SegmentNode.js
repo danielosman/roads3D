@@ -30,6 +30,14 @@ export default class SegmentNode {
     }
   }
 
+  removeSnapPoint () {
+    this._snapPoint = null
+  }
+
+  removeSegment (segment) {
+    this._segmentDirs = this._segmentDirs.filter(sd => sd.segment._id !== segment._id)
+  }
+
   actualNode () {
     if (this._snapPoint !== null && this._snapPoint.snapped) {
       if (this._snapPoint.isNode) {
@@ -40,7 +48,7 @@ export default class SegmentNode {
         return this
       }
     }
-    this._snapPoint = null
+    this.removeSnapPoint()
     return this
   }
 
@@ -66,7 +74,7 @@ export default class SegmentNode {
       nextSegmentDir.alongs[0] = t0
     })
     this._segmentDirs.forEach(segmentDir => {
-      segmentDir.along = Math.max(segmentDir.alongs[0], segmentDir.alongs[1]) + 10
+      segmentDir.along = Math.max(segmentDir.alongs[0], segmentDir.alongs[1]) + 4
       const borderA = Segment.borderA(this.p, segmentDir.dirV, segmentDir.segment.r)
       const borderB = Segment.borderB(this.p, segmentDir.dirV, -segmentDir.segment.r)
       borderA.pointAt(segmentDir.along, segmentDir.alongPoints[1])
@@ -90,6 +98,10 @@ export default class SegmentNode {
     return this._segmentDirs
   }
 
+  get snapPoint () {
+    return this._snapPoint
+  }
+
   modifyFromSnapPoint (snapPoint) {
     this._snapPoint = snapPoint
     let point = snapPoint.p
@@ -100,7 +112,7 @@ export default class SegmentNode {
   }
 
   distanceToSquared (point, minPoint) {
-    const d = this._point.distanceToSquared(point) - this._rSquared
+    const d = this._point.distanceToSquared(point) - this._rSquared - 16
     if (d < minPoint.d) {
       minPoint.d = d
       minPoint.node = this
