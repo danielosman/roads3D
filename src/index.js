@@ -86,6 +86,8 @@ const newRoadSegmentNodeRender$ = new Rx.Subject()
 const animation$ = Rx.interval(0, Rx.Scheduler.animationFrame)
 const mouseMove$ = Rx.fromEvent(canvas, 'mousemove')
 const click$ = Rx.fromEvent(canvas, 'click')
+const keydown$ = Rx.fromEvent(document, 'keydown').pipe(Op.map(ev => ({ key: ev.key, v: 1 })))
+const keyup$ = Rx.fromEvent(document, 'keyup').pipe(Op.map(ev => ({ key: ev.key, v: 0 })))
 const addRoadButton$ = Rx.fromEvent(stateButtons.addRoadButton, 'click').pipe(Op.mapTo('addRoad'))
 const cancelButton$ = Rx.fromEvent(cancelButton, 'click')
 const rightButton$ = Rx.fromEvent(canvas, 'contextmenu')
@@ -182,8 +184,57 @@ distinctState$.subscribe(s => {
   }
 })
 
-animation$.subscribe(() => {
-  renderer.render(scene, camera)
-})
+const keyHandler$ = Rx.merge(keydown$, keyup$).pipe(
+  Op.startWith({ key: 'w', v: 0 }),
+  Op.scan((acc, cur) => {
+    acc[cur.key] = cur.v
+    return acc
+  }, {})
+)
+
+const hVector = new THREE.Vector3(1, 0, 0)
+const vVector = new THREE.Vector3(0, 1, 0)
+
+const moveCamera = function(frame, keys) {
+  const moveBy = 2
+  const rotateBy = 0.01
+  let hLen = 0
+  let vLen = 0
+  if (keys.d) {
+    hLen += moveBy
+  }
+  if (keys.a) {
+    hLen -= moveBy
+  }
+  if (keys.s) {
+    vLen -= moveBy
+  }
+  if (keys.w) {
+    vLen += moveBy
+  }
+  if (hLen) camera.translateOnAxis(hVector, hLen)
+  if (vLen) camera.translateOnAxis(vVector, vLen)
+  let rot = 0
+  if (keys.q) {
+    rot += rotateBy
+  }
+  if (keys.e) {
+    rot -= rotateBy
+  }
+  if (rot) camera.rotateZ(rot)
+  rot = 0
+  if (keys.r) {
+    rot += rotateBy
+  }
+  if (keys.f) {
+    rot -= rotateBy
+  }
+  if (rot) camera.rotateX(rot)
+}
+
+animation$.pipe(
+  Op.withLatestFrom(keyHandler$, moveCamera),
+  Op.tap(() => renderer.render(scene, camera))
+).subscribe()
 
 canvas.addEventListener('contextmenu', onRightButton)
