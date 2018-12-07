@@ -8,8 +8,8 @@ import RoadSegmentView from "./road/RoadSegmentView"
 import SegmentNodeView from "./road/SegmentNodeView"
 
 const scene = new THREE.Scene()
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 5000)
-const renderer = new THREE.WebGLRenderer()
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 5000)
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
 
 const raycaster = new THREE.Raycaster()
 const mouse = new THREE.Vector2()
