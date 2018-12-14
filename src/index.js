@@ -86,19 +86,34 @@ const hillGroundNodes = []
 //console.log("points: ", delaunay.points)
 for (let i = 0; i < nHillGroundPointIndexes; i += 2) {
   hillGroundGeometry.vertices.push(new THREE.Vector3(delaunay.points[i], delaunay.points[i + 1], Math.random() + 1))
-  hillGroundNodes.push({ continent: 0 })
+  hillGroundNodes.push({ continent: -1 })
 }
 const continentColors = [new THREE.Color(0xd4c5ad), new THREE.Color(0x78430d), new THREE.Color(0xc19e18), new THREE.Color(0xa25017)]
 const continents = continentColors.map(function(color, i) {
-  if (i === 0) return { nodes: [], color, h: 0 }
-  const nodeIndex = Math.floor(Math.random() * hillGroundNodes.length)
-  if (hillGroundNodes[nodeIndex].continent === 0) {
-    hillGroundNodes[nodeIndex].continent = i
-  }
   const dirX = (2 * Math.random() - 1) * maxContinentDir
   const dirY = (2 * Math.random() - 1) * maxContinentDir
   const dir = new THREE.Vector2(dirX, dirY)
   const len = dir.length()
+  if (i === 0) {
+    const continent0 = { nodes: [], color, h: -maxContinentHeight, dir, len }
+    for (let j = 0; j < delaunay.halfedges.length; j += 3) {
+      if ((delaunay.halfedges[j] < 0) || (delaunay.halfedges[j + 1] < 0) || (delaunay.halfedges[j + 2] < 0)) {
+        const p0Index = delaunay.triangles[j]
+        const p1Index = delaunay.triangles[j + 1]
+        const p2Index = delaunay.triangles[j + 2]
+        hillGroundNodes[p0Index].continent = 0
+        hillGroundNodes[p1Index].continent = 0
+        hillGroundNodes[p2Index].continent = 0
+        continent0.nodes.push(p0Index, p1Index, p2Index)
+      }
+    }
+    return continent0
+  }
+  let nodeIndex = -1
+  while ((nodeIndex < 0) || (hillGroundNodes[nodeIndex].continent !== -1)) {
+    nodeIndex = Math.floor(Math.random() * hillGroundNodes.length)
+  }
+  hillGroundNodes[nodeIndex].continent = i
   return { nodes: [nodeIndex], color, h: maxContinentHeight * Math.random(), dir, len }
 })
 hillGroundNodes.forEach(function(node, i) {
@@ -106,7 +121,7 @@ hillGroundNodes.forEach(function(node, i) {
     if (i < continent.nodes.length) {
       const neighbors = Array.from(delaunay.neighbors(continent.nodes[i]))
       neighbors.forEach(function(neighbor) {
-        if (hillGroundNodes[neighbor].continent === 0) {
+        if (hillGroundNodes[neighbor].continent === -1) {
           hillGroundNodes[neighbor].continent = continentIndex
           continent.nodes.push(neighbor)
         }
