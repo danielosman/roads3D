@@ -1,7 +1,7 @@
 import * as THREE from "three"
 import { quadtree } from 'd3-quadtree'
 import { geoDelaunay } from 'd3-geo-voronoi'
-import { scaleThreshold, scaleLinear } from 'd3-scale'
+import { scaleThreshold, scaleLinear, scaleQuantize } from 'd3-scale'
 
 const planetR = 100
 const maxTemperature = 40
@@ -10,6 +10,7 @@ const nPoints = 600
 const maxContinentHeight = planetR / 50
 const maxContinentDir = 2
 const continentForceFactor = 0.5
+const nContinents = 8
 
 const q0 = quadtree()
 const q1 = quadtree()
@@ -24,8 +25,8 @@ function shiftedLonLat(point0) {
 }
 
 const temperatureDropAtLatitude = scaleLinear().domain([-90, -60, -30, 0, 30, 60, 90]).range([50, 24, 6, 0, 6, 24, 50])
-const temperatureDropAtAltitude = scaleLinear().domain([-maxContinentHeight, 0, maxContinentHeight]).range([0, 0, 25])
-const moistureAddAtTemperature = scaleLinear().domain([-10, maxTemperature + 10]).range([0, 1])
+const temperatureDropAtAltitude = scaleLinear().domain([-maxContinentHeight, 0, maxContinentHeight]).range([0, 0, 15])
+const moistureAddAtTemperature = scaleLinear().domain([-10, maxTemperature]).range([0, 5])
 const moistureDropAtAltitude = scaleLinear().domain([0, maxContinentHeight * 3]).range([0.05, 1])
 const windDirAtLatitude = scaleThreshold().domain([-60, -30, 0, 30, 60]).range([
   (new THREE.Vector2(-1, 1)).normalize(),
@@ -35,6 +36,27 @@ const windDirAtLatitude = scaleThreshold().domain([-60, -30, 0, 30, 60]).range([
   (new THREE.Vector2(1, 1)).normalize(),
   (new THREE.Vector2(-1, -1)).normalize()
 ])
+const temperatureBiomeIndexScale = scaleQuantize()
+  .domain([maxTemperature - temperatureDropAtLatitude(90) - temperatureDropAtAltitude(maxContinentHeight), maxTemperature])
+  .range([0, 1, 2, 3])
+const moistureBiomeIndexScale = scaleQuantize()
+  .domain([0, 4])
+  .range([0, 1, 2, 3, 4, 5])
+const biomeIndex = [
+  ['scorched',        'bare',             'tundra',         'snow',             'snow',               'snow'],
+  ['temperate',       'temperate',        'shrubLand',      'shrubLand',        'taiga',              'taiga'],
+  ['temperateDesert', 'grassland',        'grassland',      'deciduousForest',  'deciduousForest',    'rainForest'],
+  ['tropicalDesert',  'grassland',        'seasonalForest', 'seasonalForest',   'tropicalRainForest', 'tropicalRainForest']]
+const biomeColors = {
+  scorched: 0x999999, bare: 0xbbbbbb, tundra: 0xddddbb, snow: 0xf8f8f8,
+  temperate: 0xc4e4ba, temperateDesert: 0xe4e8ca, shrubLand: 0xc4ccbb, taiga: 0xccd4bb,
+  grassland: 0xc4d4aa, deciduousForest: 0xb4c9a9, rainForest: 0xa4c4a8,
+  tropicalDesert: 0xe9ddc7, seasonalForest: 0xa9cca4, tropicalRainForest: 0x9cbba9
+}
+const biomesUsed = {
+  scorched: 0, bare: 0, tundra: 0, snow: 0, temperateDesert: 0, temperate: 0, shrubLand: 0, taiga: 0,
+  grassland: 0, deciduousForest: 0, rainForest: 0, tropicalDesert: 0, seasonalForest: 0, tropicalRainForest: 0
+}
 
 export default function createPlanet (scene) {
   for (let i = 0; i < nPoints; i++) {
@@ -82,16 +104,8 @@ export default function createPlanet (scene) {
   const planetNodes = planetPoints.map((point, i) => ({ continent: -1, h: planetR, t: 0, point, i, moistureFromNeighbors: 0, moistureDrop: 0 }))
 
   // Continents
-  const continentColors = [
-    new THREE.Color(0xd4c5ad), // almost frozen
-    new THREE.Color(0x78430d), // mountain
-    new THREE.Color(0xc19e18), // desert
-    new THREE.Color(0xa25017),
-    new THREE.Color(0x58230d),
-    new THREE.Color(0xc27037),
-    new THREE.Color(0xa17e08),
-  ]
-  const continents = continentColors.map((color, i) => {
+  const continents = []
+  for (let i = 0; i < nContinents; i++) {
     const dirX = (2 * Math.random() - 1) * maxContinentDir
     const dirY = (2 * Math.random() - 1) * maxContinentDir
     const dir = new THREE.Vector2(dirX, dirY)
@@ -101,8 +115,15 @@ export default function createPlanet (scene) {
       nodeIndex = Math.floor(Math.random() * planetNodes.length)
     }
     planetNodes[nodeIndex].continent = i
-    return { nodes: [nodeIndex], color, h: (2 * Math.random() - 1) * maxContinentHeight, dir, len }
-  })
+    let h = 0
+    if (Math.random() < 0.5) {
+      h = -maxContinentHeight * (Math.random() * 0.9 + 0.1)
+    } else {
+      h = maxContinentHeight * (Math.random() * 0.9 + 0.1)
+    }
+    const continent = { nodes: [nodeIndex], h, dir, len }
+    continents.push(continent)
+  }
 
   // Expand continents
   planetNodes.forEach(function (node, i) {
@@ -183,12 +204,12 @@ export default function createPlanet (scene) {
     const moistureDrop = Math.min(moistureDropAtAltitude(h), moisture)
     //console.log("moistureDrop: ", moistureDrop, planetNode.i)
     planetNode.moistureDrop += moistureDrop
-    moisture -= moistureDrop
-    if (moisture <= 0) return
+    const moistureLeft = moisture - Math.max(0.25 * moistureDrop, 0.05)
+    if (moistureLeft <= 0.01) return
     planetNode.windNeighbors.forEach(windNeighbor => {
       const neighborNode = planetNodes[windNeighbor.i]
       const neighborH = Math.max(neighborNode.h - planetR, 0)
-      let moisturePassed = windNeighbor.frac * moisture
+      let moisturePassed = windNeighbor.frac * moistureLeft
       if (neighborH > h) {
         const md = moistureDropAtAltitude(neighborH - h)
         if (waterNode) {
@@ -228,42 +249,27 @@ export default function createPlanet (scene) {
     planetLandGeometry.vertices.push(planetNodeCoords)
   })
 
-  console.log("planetNodes: ", planetNodes.filter(n => n.moistureDrop > 0))
+  const moistureDropRange = [1, 0]
+  planetNodes.forEach(planetNode => {
+    if (planetNode.moistureDrop < moistureDropRange[0]) {
+      moistureDropRange[0] = planetNode.moistureDrop
+    }
+    if (planetNode.moistureDrop > moistureDropRange[1]) {
+      moistureDropRange[1] = planetNode.moistureDrop
+    }
+  })
+
+  console.log("moistureDropRange: ", moistureDropRange)
 
   // Faces
   const vertexColorsForIndexes = indexes => {
     return indexes.map(index => {
       const planetNode = planetNodes[index]
-      let color = null
-      if (planetNode.moistureDrop > 0.2) {
-        if (planetNode.t > 20) {
-          // Tropics
-          color = new THREE.Color(0x48d32d)
-        } else if (planetNode.t > 10) {
-          // Temperate
-          color = new THREE.Color(0x18a30d)
-        } else if (planetNode.t > 0) {
-          // Tundra
-          color = new THREE.Color(0xd4e6ad)
-        } else {
-          // Snow
-          color = new THREE.Color(0xe4e5ed)
-        }
-      } else {
-        if (planetNode.t > 20) {
-          // Desert
-          color = new THREE.Color(0xd59e18)
-        } else if (planetNode.t > 10) {
-          // Step
-          color = new THREE.Color(0xcfde18)
-        } else if (planetNode.t > 0) {
-          // Plains
-          color = new THREE.Color(0xd4a84a)
-        } else {
-          // Snow
-          color = new THREE.Color(0xe4e5ed)
-        }
-      }
+      const temperatureBiomeIndex = temperatureBiomeIndexScale(planetNode.t)
+      const moistureBiomeIndex = moistureBiomeIndexScale(planetNode.moistureDrop)
+      const biome = biomeIndex[temperatureBiomeIndex][moistureBiomeIndex]
+      biomesUsed[biome]++
+      const color = new THREE.Color(biomeColors[biome])
       const r = 1 - 0.1 * Math.random()
       const c = new THREE.Color(r, r, r)
       color.lerp(c, 0.05 * Math.random())
@@ -273,60 +279,15 @@ export default function createPlanet (scene) {
   for (let i = 0; i < delaunay.triangles.length; i++) {
     const indexes = [delaunay.triangles[i][0], delaunay.triangles[i][1], delaunay.triangles[i][2]]
     const face = new THREE.Face3(indexes[0], indexes[1], indexes[2])
-    const nodesAboveSealevel = indexes.filter(index => planetNodes[index].h > 0).length
-    const sumOfNodeMoistureDrop = indexes.reduce((acc, index) => acc + planetNodes[index].moistureDrop, 0)
-    const averageTemperature = indexes.reduce((acc, index) => acc + planetNodes[index].t, 0) / 3
-    const maxSlope = indexes.reduce((acc, index, i) => {
-      const otherI = i === 2 ? 0 : i + 1
-      const slope = Math.abs(planetNodes[index].h - planetNodes[indexes[otherI]].h)
-      return slope > acc ? slope : acc
-    }, 0)
-    let color = new THREE.Color(0xd4c5ad)
-    if (maxSlope > 2 * maxContinentHeight) {
-      // Mountain
-      color = new THREE.Color(0x78430d)
-    } else {
-      if (sumOfNodeMoistureDrop > 0.3) {
-        if (averageTemperature > 20) {
-          // Tropics
-          color = new THREE.Color(0x48d32d)
-        } else if (averageTemperature > 10) {
-          // Temperate
-          color = new THREE.Color(0x18a30d)
-        } else if (averageTemperature > 0) {
-          // Tundra
-          color = new THREE.Color(0xd4c5ad)
-        } else {
-          // Snow
-          color = new THREE.Color(0xe4e5ed)
-        }
-      } else {
-        if (averageTemperature > 20) {
-          // Desert
-          color = new THREE.Color(0xc19e18)
-        } else if (averageTemperature > 10) {
-          // Step
-          color = new THREE.Color(0xc1de18)
-        } else if (averageTemperature > 0) {
-          // Plains
-          color = new THREE.Color(0xd4c5ad)
-        } else {
-          // Snow
-          color = new THREE.Color(0xe4e5ed)
-        }
-      }
-    }
-    const r = 1 - 0.1 * Math.random()
-    const c = new THREE.Color(r, r, r)
-    color.lerp(c, 0.05 * Math.random())
-    face.color = color
     face.vertexColors = vertexColorsForIndexes(indexes)
     planetLandGeometry.faces.push(face)
   }
 
+  console.log("biomesUsed: ", biomesUsed)
+
   // Land Object
   planetLandGeometry.computeFaceNormals()
-  //planetLandGeometry.computeVertexNormals()
+  planetLandGeometry.computeVertexNormals()
   const planetLandMaterial = new THREE.MeshLambertMaterial({
     color: 0xd4c5ad,
     wireframe: false,
