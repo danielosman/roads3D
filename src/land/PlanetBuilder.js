@@ -2,11 +2,12 @@ import * as THREE from "three"
 import { quadtree } from 'd3-quadtree'
 import { geoDelaunay } from 'd3-geo-voronoi'
 import { scaleThreshold, scaleLinear, scaleQuantize } from 'd3-scale'
+import { geoDistance } from 'd3-geo'
 
 const planetR = 100
 const maxTemperature = 40
 const nSamples = 30
-const nPoints = 600
+const nPoints = 500
 const maxContinentHeight = planetR / 100
 const maxContinentDir = 2
 const continentForceFactor = 0.5
@@ -23,6 +24,8 @@ function shiftedLonLat(point0) {
   if (lat >= 90) lat -= 180
   return [lon, lat]
 }
+
+console.log("geoDistance: ", geoDistance([-3, 85], [170, -85]) * 180 / Math.PI)
 
 const temperatureDropAtLatitude = scaleLinear().domain([-90, -60, -30, 0, 30, 60, 90]).range([50, 24, 6, 0, 6, 24, 50])
 const temperatureDropAtAltitude = scaleLinear().domain([-maxContinentHeight, 0, maxContinentHeight]).range([0, 0, 15])
@@ -277,16 +280,18 @@ export default function createPlanet (scene) {
     })
   })
 
-  // Rivers
+  // River flows
   planetNodes.forEach(planetNode => {
     if (planetNode.h <= 0) return
-    planetNode.waterFlowIn += Math.min(planetNode.moistureDrop, 1)
+    planetNode.waterFlowInFull = planetNode.moistureDrop
+    planetNode.waterFlowIn = Math.min(planetNode.moistureDrop, 1)
     delaunay.neighbors[planetNode.i].forEach(neighborIndex => {
       const neighborNode = planetNodes[neighborIndex]
       if (neighborNode.h > planetNode.h) {
-        const neighborMoistureDrop = Math.min(neighborNode.moistureDrop, 1)
         const windNeighbor = planetNode.windNeighbors ? planetNode.windNeighbors.find(wn => wn.i === neighborIndex) : null
-        planetNode.waterFlowIn += neighborMoistureDrop + (windNeighbor ? Math.min(windNeighbor.blockedMoisture, 1) : 0)
+        const blockedMoisture = (windNeighbor ? windNeighbor.blockedMoisture : 0)
+        planetNode.waterFlowInFull = neighborNode.moistureDrop + blockedMoisture
+        planetNode.waterFlowIn += Math.min(neighborNode.moistureDrop, 1) + Math.min(blockedMoisture, 1)
       }
     })
   })
@@ -307,11 +312,12 @@ export default function createPlanet (scene) {
     oceanGeometry.vertices.push(oceanNodeCoords)
     // River nodes
     if (planetNode.waterFlowIn > 3) {
-      planetNode.riverNode = true
+      planetNode.isRiverNode = true
       riverNodes.push(planetNode)
     }
   })
 
+  // Moisture Drop Range
   const moistureDropRange = [1, 0]
   planetNodes.forEach(planetNode => {
     if (planetNode.moistureDrop < moistureDropRange[0]) {
@@ -321,8 +327,62 @@ export default function createPlanet (scene) {
       moistureDropRange[1] = planetNode.moistureDrop
     }
   })
-
   console.log("moistureDropRange: ", moistureDropRange)
+
+  // Rivers
+  const riverMaterial = new THREE.MeshLambertMaterial({ color: 0x3356f0 })
+  const riverLineMaterial = new THREE.LineBasicMaterial({ color: 0x3355ee })
+  const axis = new THREE.Vector3(0, 1, 0)
+  const riverFromNodes = (nodes) => {
+    const r = ((nodes[0].waterFlowInFull + nodes[1].moistureDrop) / moistureDropRange[1]) + 1
+    const dir = (new THREE.Vector3()).subVectors(nodes[1].coords, nodes[0].coords)
+    const cross = (new THREE.Vector3()).crossVectors(nodes[0].coords, nodes[1].coords).normalize()
+    const riverPathGeometry = new THREE.Geometry()
+    const spherical0 = new THREE.Spherical(nodes[0].h + planetR + 0.1, Math.PI * (nodes[0].point[1] + 90) / 180, 2 * Math.PI * (nodes[0].point[0] + 180) / 360)
+    const v0 = (new THREE.Vector3()).setFromSpherical(spherical0)
+    riverPathGeometry.vertices.push(v0)
+    riverPathGeometry.vertices.push(nodes[1].coords.clone().sub(cross.clone().multiplyScalar(r)))
+    riverPathGeometry.vertices.push(nodes[1].coords.clone().add(cross.clone().multiplyScalar(r)))
+    riverPathGeometry.faces.push(new THREE.Face3(0, 1, 2))
+    riverPathGeometry.computeFaceNormals()
+    const riverPathObject = new THREE.Mesh(riverPathGeometry, riverMaterial)
+    scene.add(riverPathObject)
+    console.log("River added")
+  }
+  riverNodes.forEach(planetNode => {
+    let chosenNeighbor = null
+    let chosenNeighborH = planetNode.h
+    delaunay.neighbors[planetNode.i].forEach(neighborIndex => {
+      const neighborNode = planetNodes[neighborIndex]
+      if (neighborNode.h < 0 && neighborNode.h < chosenNeighborH) {
+        chosenNeighborH = neighborNode.h
+        chosenNeighbor = neighborNode
+      }
+    })
+    if (chosenNeighbor) {
+      /*
+      const radiusTop = (planetNode.waterFlowInFull + chosenNeighbor.moistureDrop) / moistureDropRange[1]
+      const radiusBottom = planetNode.waterFlowInFull / moistureDropRange[1]
+      const dirVector = (new THREE.Vector3()).subVectors(chosenNeighbor.coords, planetNode.coords)
+      const riverGeometry = new THREE.CylinderGeometry(radiusTop, radiusBottom, dirVector.length(), 8)
+      const riverObject = new THREE.Mesh(riverGeometry, riverMaterial)
+      riverObject.quaternion.setFromUnitVectors(axis, dirVector.clone().normalize())
+      riverObject.position.copy(dirVector.clone().multiplyScalar(0.5).add(planetNode.coords))
+      console.log("Added river")
+      scene.add(riverObject)
+      */
+      /*
+      const riverLineGeometry = new THREE.Geometry()
+      const spherical0 = new THREE.Spherical(planetNode.h + planetR + 0.1, Math.PI * (planetNode.point[1] + 90) / 180, 2 * Math.PI * (planetNode.point[0] + 180) / 360)
+      const v0 = (new THREE.Vector3()).setFromSpherical(spherical0)
+      riverLineGeometry.vertices.push(v0)
+      riverLineGeometry.vertices.push(chosenNeighbor.coords.clone())
+      const riverLineObject = new THREE.Line(riverLineGeometry, riverLineMaterial)
+      scene.add(riverLineObject)
+      */
+      riverFromNodes([planetNode, chosenNeighbor])
+    }
+  })
 
   // Faces
   let biomesUsedSum = 0
@@ -370,16 +430,18 @@ export default function createPlanet (scene) {
   // Ocean Object
   //const oceanGeometry = new THREE.SphereGeometry(planetR, 32, 32)
   oceanGeometry.computeFaceNormals()
-  const oceanMaterial = new THREE.MeshLambertMaterial({ color: 0x3355ee })
+  const oceanMaterial = new THREE.MeshLambertMaterial({ color: 0x3355ee, flatShading: true })
   const oceanObject = new THREE.Mesh(oceanGeometry, oceanMaterial)
   scene.add(oceanObject)
 
   // River nodes
-  const riverMaterial = new THREE.MeshLambertMaterial({ color: 0x4488ff })
+  /*
+  const riverNodeMaterial = new THREE.MeshLambertMaterial({ color: 0x4488ff })
   riverNodes.forEach(planetNode => {
-    const riverNodeGeometry = new THREE.SphereGeometry(planetR / 100, 8, 8)
-    const riverNodeObject = new THREE.Mesh(riverNodeGeometry, riverMaterial)
+    const riverNodeGeometry = new THREE.SphereGeometry((planetNode.waterFlowInFull / moistureDropRange[1]) + 1, 8, 8)
+    const riverNodeObject = new THREE.Mesh(riverNodeGeometry, riverNodeMaterial)
     riverNodeObject.position.set(planetNode.coords.x, planetNode.coords.y, planetNode.coords.z)
     scene.add(riverNodeObject)
   })
+  */
 }
