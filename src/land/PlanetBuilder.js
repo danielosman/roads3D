@@ -1,33 +1,23 @@
 import * as THREE from "three"
-import { quadtree } from 'd3-quadtree'
 import { geoDelaunay } from 'd3-geo-voronoi'
 import { scaleThreshold, scaleLinear, scaleQuantize } from 'd3-scale'
+import { geoDistance } from 'd3-geo'
 
 const planetR = 100
 const maxTemperature = 40
-const nSamples = 30
-const nPoints = 600
+const nSamples = 25
+const nPoints = 614
 const maxContinentHeight = planetR / 100
 const maxContinentDir = 2
 const continentForceFactor = 0.5
 const nContinents = 8
-
-const q0 = quadtree()
-const q1 = quadtree()
-const planetPoints = []
-
-function shiftedLonLat(point0) {
-  let lon = point0[0] + 180
-  let lat = point0[1] + 90
-  if (lon >= 180) lon -= 360
-  if (lat >= 90) lat -= 180
-  return [lon, lat]
-}
+const nSmallContinents = 8
 
 const temperatureDropAtLatitude = scaleLinear().domain([-90, -60, -30, 0, 30, 60, 90]).range([50, 24, 6, 0, 6, 24, 50])
 const temperatureDropAtAltitude = scaleLinear().domain([-maxContinentHeight, 0, maxContinentHeight]).range([0, 0, 15])
 const moistureAddAtTemperature = scaleLinear().domain([0, 30]).range([0.5, 1])
-const moistureDropAtAltitude = scaleLinear().domain([0, maxContinentHeight * 3]).range([0.05, 1])
+const moistureDropAtAltitude = scaleLinear().domain([0, maxContinentHeight * 3]).range([0.1, 1])
+const moistureDropAtTemperature = scaleLinear().domain([0, 10, 20, 30, 40]).range([0.18, 0.25, 0.38, 0.61, 0.95])
 const windDirAtLatitude = scaleThreshold().domain([-60, -30, 0, 30, 60]).range([
   (new THREE.Vector2(-1, 1)).normalize(),
   (new THREE.Vector2(1, -1)).normalize(),
@@ -43,55 +33,48 @@ const moistureBiomeIndexScale = scaleQuantize()
   .domain([0, 1])
   .range([0, 1, 2, 3, 4, 5])
 const biomeIndex = [
-  ['scorched',        'bare',             'tundra',         'snow',             'snow',               'snow'],
-  ['temperateDesert', 'temperate',        'shrubLand',      'shrubLand',        'taiga',              'taiga'],
-  ['temperateDesert', 'grassland',        'grassland',      'deciduousForest',  'deciduousForest',    'rainForest'],
-  ['tropicalDesert',  'grassland',        'seasonalForest', 'seasonalForest',   'tropicalRainForest', 'tropicalRainForest']]
+  ['scorched',        'bare',           'tundra',         'snow',             'snow',               'snow'],
+  ['temperateDesert', 'shrubLand',      'shrubLand',      'shrubLand',        'taiga',              'taiga'],
+  ['temperateDesert', 'grassland',      'grassland',      'deciduousForest',  'deciduousForest',    'rainForest'],
+  ['tropicalDesert',  'grassland',      'seasonalForest', 'seasonalForest',   'tropicalRainForest', 'tropicalRainForest']]
 const biomeColors = {
   scorched: 0x999999, bare: 0xbbbbbb, tundra: 0xddddbb, snow: 0xf8f8f8,
-  temperate: 0xc4e4ba, temperateDesert: 0xe4e8ca, shrubLand: 0xc4ccbb, taiga: 0xccd4bb,
+  temperateDesert: 0xe4e8ca, shrubLand: 0xc4ccbb, taiga: 0xccd4bb,
   grassland: 0xc4d4aa, deciduousForest: 0xb4c9a9, rainForest: 0xa4c4a8,
   tropicalDesert: 0xe9ddc7, seasonalForest: 0xa9cca4, tropicalRainForest: 0x9cbba9
 }
 const biomesUsed = {
-  scorched: 0, bare: 0, tundra: 0, snow: 0, temperateDesert: 0, temperate: 0, shrubLand: 0, taiga: 0,
+  scorched: 0, bare: 0, tundra: 0, snow: 0, temperateDesert: 0, shrubLand: 0, taiga: 0,
   grassland: 0, deciduousForest: 0, rainForest: 0, tropicalDesert: 0, seasonalForest: 0, tropicalRainForest: 0
 }
 const erosionHeigh2WetMoistureScale = scaleLinear().domain([0, 1]).range([0, 0.75]).clamp(true)
 const erosionWet2WaterMoistureScale = scaleLinear().domain([0, 1]).range([0, 0.75]).clamp(true)
 const erosionHeighWet2WhateverMoistureScale = scaleLinear().domain([0, 1]).range([0, 0.75]).clamp(true)
 
+const multiuseSpherical = new THREE.Spherical()
+const multiuseVector3 = new THREE.Vector3()
+
 export default function createPlanet (scene) {
+  const planetPoints = [[(2 * Math.random() - 1) * 180, (2 * Math.random() - 1) * 90]]
   for (let i = 0; i < nPoints; i++) {
     let chosenSample0 = null
-    let chosenSample1 = null
-    let maxDistance = 2
+    let maxDistance = 0
+    const nPlanetPoints = planetPoints.length
     for (let j = 0; j < nSamples; j++) {
-      const point0 = [(2 * Math.random() - 1) * 180, (2 * Math.random() - 1) * 85]
-      const point1 = shiftedLonLat(point0)
-      const foundPoint0 = q0.find(point0[0], point0[1])
-      if (!foundPoint0) {
-        q0.add(point0)
-        q1.add(point1)
-        break
+      const point0 = [(2 * Math.random() - 1) * 180, (2 * Math.random() - 1) * 90]
+      let minDistance = 100
+      for (let k = 0; k < nPlanetPoints; k++) {
+        const dist = geoDistance(point0, planetPoints[k])
+        if (dist < minDistance) {
+          minDistance = dist
+        }
       }
-      const foundPoint1 = q1.find(point1[0], point1[1])
-      const dx0 = foundPoint0[0] - point0[0]
-      const dy0 = foundPoint0[1] - point0[1]
-      const dx1 = foundPoint1[0] - point1[0]
-      const dy1 = foundPoint1[1] - point1[1]
-      const dist = Math.min(dx0 * dx0 + dy0 * dy0, dx1 * dx1 + dy1 * dy1);
-      if (dist > maxDistance) {
-        maxDistance = dist
+      if (minDistance > maxDistance) {
+        maxDistance = minDistance
         chosenSample0 = point0
-        chosenSample1 = point1
       }
     }
-    if (chosenSample0) {
-      q0.add(chosenSample0)
-      q1.add(chosenSample1)
-      planetPoints.push(chosenSample0)
-    }
+    planetPoints.push(chosenSample0)
   }
 
   // Lights
@@ -105,18 +88,28 @@ export default function createPlanet (scene) {
   const planetLandGeometry = new THREE.Geometry()
   const oceanGeometry = new THREE.Geometry()
   const delaunay = geoDelaunay(planetPoints)
-  const planetNodes = planetPoints.map((point, i) => ({ continent: -1, h: 0, t: 0, point, i, moistureFromNeighbors: 0, moistureDrop: 0, waterFlowIn: 0 }))
+  const planetNodes = planetPoints.map((point, i) => ({
+    continent: -1,
+    h: 0, t: 0, point, i,
+    moistureFromNeighbors: 0,
+    moistureDrop: 0,
+    moisture: 0,
+    waterFlowIn: 0
+  }))
 
   // Continents
   const continents = []
-  for (let i = 0; i < nContinents; i++) {
+  const createContinent = i => {
     const dirX = (2 * Math.random() - 1) * maxContinentDir
     const dirY = (2 * Math.random() - 1) * maxContinentDir
     const dir = new THREE.Vector2(dirX, dirY)
     const len = dir.length()
     let nodeIndex = -1
+    let ii = 0
     while ((nodeIndex < 0) || (planetNodes[nodeIndex].continent !== -1)) {
       nodeIndex = Math.floor(Math.random() * planetNodes.length)
+      ii++
+      if (ii > nSamples) return
     }
     planetNodes[nodeIndex].continent = i
     let h = 0
@@ -125,25 +118,53 @@ export default function createPlanet (scene) {
     } else {
       h = maxContinentHeight * (Math.random() * 0.9 + 0.1)
     }
-    const continent = { nodes: [nodeIndex], h, dir, len }
-    continents.push(continent)
+    return { nodes: [nodeIndex], h, dir, len, isExpanding: true, nodeIndexToExpand: 0, size: 1 }
+  }
+  for (let i = 0; i < nContinents; i++) {
+    const continent = createContinent(i)
+    if (continent) continents.push(continent)
   }
 
   // Expand continents
-  planetNodes.forEach(function (node, i) {
+  let nNotExpandingContinents = 0
+  const addSmallContinentsProbabilityDelta = (nContinents / nPoints) * nSmallContinents / 2
+  let addSmallContinentsProbability = -addSmallContinentsProbabilityDelta
+  let nSmallContinentsAdded = 0
+  while (nNotExpandingContinents < continents.length) {
     continents.forEach(function (continent, continentIndex) {
-      if (i < continent.nodes.length) {
-        const neighbors = Array.from(delaunay.neighbors[continent.nodes[i]])
+      if (continent.isExpanding) {
+        const nodeIndex = continent.nodes[continent.nodeIndexToExpand]
+        planetNodes[nodeIndex].h += continent.h + (Math.random() - 0.5) * maxContinentHeight / 10
+        const neighbors = Array.from(delaunay.neighbors[nodeIndex])
         neighbors.forEach(function (neighbor) {
           if (planetNodes[neighbor].continent === -1) {
             planetNodes[neighbor].continent = continentIndex
             continent.nodes.push(neighbor)
+            continent.size++
           }
         })
-        planetNodes[continent.nodes[i]].h += continent.h
+        continent.nodeIndexToExpand++
+        if (continent.nodeIndexToExpand >= continent.nodes.length) {
+          nNotExpandingContinents++
+          delete continent.isExpanding
+          delete continent.nodeIndexToExpand
+        }
       }
     })
-  })
+    if (nSmallContinentsAdded < nSmallContinents) {
+      addSmallContinentsProbability += addSmallContinentsProbabilityDelta
+      if (Math.random() < addSmallContinentsProbability) {
+        addSmallContinentsProbability = -addSmallContinentsProbabilityDelta
+        const continent = createContinent(continents.length)
+        if (continent) {
+          continents.push(continent)
+          nSmallContinentsAdded++
+          console.log("Added small continent: ", nSmallContinentsAdded)
+        }
+      }
+    }
+  }
+  console.log("Continents: ", continents)
 
   // Heights based on tectonics
   const forceFactor = continentForceFactor * maxContinentHeight / maxContinentDir
@@ -163,21 +184,21 @@ export default function createPlanet (scene) {
       dirVector.set(planetPoints[p1Index][0] - planetPoints[p0Index][0], planetPoints[p1Index][1] - planetPoints[p0Index][1]).normalize()
       force = dirVector.dot(continents[c0Index].dir)
       force -= dirVector.dot(continents[c1Index].dir)
-      dh = forceFactor * force + (Math.random() - 0.5) * maxContinentHeight / 10
+      dh = forceFactor * force
       planetNodes[p0Index].h += dh
       planetNodes[p1Index].h += dh
       // 1 -> 2
       dirVector.set(planetPoints[p2Index][0] - planetPoints[p1Index][0], planetPoints[p2Index][1] - planetPoints[p1Index][1]).normalize()
       force = dirVector.dot(continents[c1Index].dir)
       force -= dirVector.dot(continents[c2Index].dir)
-      dh = forceFactor * force + (Math.random() - 0.5) * maxContinentHeight / 10
+      dh = forceFactor * force
       planetNodes[p1Index].h += dh
       planetNodes[p2Index].h += dh
       // 0 -> 2
       dirVector.set(planetPoints[p2Index][0] - planetPoints[p2Index][0], planetPoints[p1Index][1] - planetPoints[p0Index][1]).normalize()
       force = dirVector.dot(continents[c0Index].dir)
       force -= dirVector.dot(continents[c2Index].dir)
-      dh = forceFactor * force + (Math.random() - 0.5) * maxContinentHeight / 10
+      dh = forceFactor * force
       planetNodes[p0Index].h += dh
       planetNodes[p2Index].h += dh
     }
@@ -188,8 +209,9 @@ export default function createPlanet (scene) {
 
   // Moisture
   const moistureTravel = (moisture, planetNode, hops) => {
-    if (hops > 10) return
-    const m = Math.min(moisture, 1)
+    if (hops > 10) {
+      return
+    }
     if (!planetNode.windNeighbors) {
       const windNeighbors = []
       let dotSum = 0
@@ -200,31 +222,33 @@ export default function createPlanet (scene) {
         const dot = windDir.dot(dir)
         if (dot > 0) {
           dotSum += dot
-          windNeighbors.push({ dot, i: neighborIndex, blockedMoisture: 0 })
+          windNeighbors.push({ dot, i: neighborIndex, moistureBlocked: 0 })
         }
       })
       windNeighbors.forEach(windNeighbor => windNeighbor.frac = windNeighbor.dot / dotSum)
       planetNode.windNeighbors = windNeighbors
     }
     const h = Math.max(planetNode.h, 0)
+    const m = Math.max(0, Math.min(moisture, moistureDropAtAltitude(h) + moistureDropAtTemperature(planetNode.t)) - planetNode.moistureDrop)
+    planetNode.moistureDrop += m
+    planetNode.moisture += moisture
     const waterNode = (h <= 0) ? 1 : 0
-    planetNode.moistureDrop += 0.95 * m
-    const moistureLeft = (1 - moistureDropAtAltitude(h)) * m
+    const moistureLeft = 0.9 * (moisture - m)
     if (moistureLeft <= 0.01) return
     planetNode.windNeighbors.forEach(windNeighbor => {
       const neighborNode = planetNodes[windNeighbor.i]
       const neighborH = Math.max(neighborNode.h, 0)
-      let moisturePassed = Math.pow(0.85, hops) * moistureLeft
-      //let moisturePassed = windNeighbor.frac * moistureLeft
-      if (neighborH > h) {
-        const blockedMoisture = (1 - moistureDropAtAltitude(neighborH - h)) * moisturePassed
+      const moistureBlocked = Math.max(0, moistureDropAtAltitude(neighborH - h) * moistureLeft)
+      const mBlocked = Math.max(0, moistureDropAtAltitude(neighborH - h) * m)
+      let moisturePassed = moistureLeft - moistureBlocked
+      windNeighbor.moistureBlocked += moistureBlocked
+      if (neighborH > 0) {
         if (waterNode) {
-          neighborNode.moistureDrop += Math.min(blockedMoisture, moisturePassed)
+          neighborNode.moistureDrop += mBlocked
         } else {
-          planetNode.moistureDrop += Math.min(blockedMoisture, moisturePassed)
-          windNeighbor.blockedMoisture += blockedMoisture
+          planetNode.moistureDrop += 0.5 * mBlocked
+          neighborNode.moistureDrop += 0.5 * mBlocked
         }
-        moisturePassed -= blockedMoisture
       }
       if (moisturePassed > 0) {
         if (!neighborNode.windNeighbors) {
@@ -239,12 +263,10 @@ export default function createPlanet (scene) {
     const h = Math.max(planetNode.h, 0)
     const waterNode = (h <= 0) ? 1 : 0
     let moistureAdd = waterNode * moistureAddAtTemperature(planetNode.t)
-    //console.log("moistureAdd: ", moistureAdd)
     if (!planetNode.windNeighbors && planetNode.moistureFromNeighbors) {
       moistureAdd += planetNode.moistureFromNeighbors
     }
     if (moistureAdd > 0) {
-      //console.log("moistureAdd: ", moistureAdd)
       moistureTravel(moistureAdd, planetNode, 0)
     }
   })
@@ -277,16 +299,18 @@ export default function createPlanet (scene) {
     })
   })
 
-  // Rivers
+  // River flows
   planetNodes.forEach(planetNode => {
     if (planetNode.h <= 0) return
-    planetNode.waterFlowIn += Math.min(planetNode.moistureDrop, 1)
+    planetNode.waterFlowInFull = planetNode.moistureDrop
+    planetNode.waterFlowIn = Math.min(planetNode.moistureDrop, 1)
     delaunay.neighbors[planetNode.i].forEach(neighborIndex => {
       const neighborNode = planetNodes[neighborIndex]
       if (neighborNode.h > planetNode.h) {
-        const neighborMoistureDrop = Math.min(neighborNode.moistureDrop, 1)
         const windNeighbor = planetNode.windNeighbors ? planetNode.windNeighbors.find(wn => wn.i === neighborIndex) : null
-        planetNode.waterFlowIn += neighborMoistureDrop + (windNeighbor ? Math.min(windNeighbor.blockedMoisture, 1) : 0)
+        const moistureBlocked = (windNeighbor ? windNeighbor.moistureBlocked : 0)
+        planetNode.waterFlowInFull = neighborNode.moistureDrop + moistureBlocked
+        planetNode.waterFlowIn += Math.min(neighborNode.moistureDrop, 1) + Math.min(moistureBlocked, 1)
       }
     })
   })
@@ -296,22 +320,23 @@ export default function createPlanet (scene) {
   planetNodes.forEach(planetNode => {
     // Planet Vertices
     const planetNodeCoords = new THREE.Vector3(0, 0, 0)
-    let spherical = new THREE.Spherical(planetNode.h + planetR, Math.PI * (planetNode.point[1] + 90) / 180, 2 * Math.PI * (planetNode.point[0] + 180) / 360)
-    planetNodeCoords.setFromSpherical(spherical)
+    multiuseSpherical.set(planetNode.h + planetR, Math.PI * (planetNode.point[1] + 90) / 180, Math.PI * planetNode.point[0] / 180)
+    planetNodeCoords.setFromSpherical(multiuseSpherical)
     planetNode.coords = planetNodeCoords
     planetLandGeometry.vertices.push(planetNodeCoords)
     // Ocean Vertices
     const oceanNodeCoords = new THREE.Vector3(0, 0, 0)
-    spherical = new THREE.Spherical(planetR, Math.PI * (planetNode.point[1] + 90) / 180, 2 * Math.PI * (planetNode.point[0] + 180) / 360)
-    oceanNodeCoords.setFromSpherical(spherical)
+    multiuseSpherical.set(planetR, Math.PI * (planetNode.point[1] + 90) / 180, Math.PI * planetNode.point[0] / 180)
+    oceanNodeCoords.setFromSpherical(multiuseSpherical)
     oceanGeometry.vertices.push(oceanNodeCoords)
     // River nodes
     if (planetNode.waterFlowIn > 3) {
-      planetNode.riverNode = true
+      planetNode.isRiverNode = true
       riverNodes.push(planetNode)
     }
   })
 
+  // Moisture Drop Range
   const moistureDropRange = [1, 0]
   planetNodes.forEach(planetNode => {
     if (planetNode.moistureDrop < moistureDropRange[0]) {
@@ -321,8 +346,63 @@ export default function createPlanet (scene) {
       moistureDropRange[1] = planetNode.moistureDrop
     }
   })
-
   console.log("moistureDropRange: ", moistureDropRange)
+
+  // Rivers
+  const riverMaterial = new THREE.MeshLambertMaterial({ color: 0x3356f0 })
+  const riverLineMaterial = new THREE.LineBasicMaterial({ color: 0x3355ee })
+  const axis = new THREE.Vector3(0, 1, 0)
+  const riverFromNodes = (nodes) => {
+    //const r = ((nodes[0].waterFlowInFull + nodes[1].moistureDrop) / moistureDropRange[1]) + 1
+    const r = ((nodes[0].waterFlowIn + nodes[1].moistureDrop) / (3 + moistureDropRange[1])) + 1
+    const dir = (new THREE.Vector3()).subVectors(nodes[1].coords, nodes[0].coords)
+    const cross = (new THREE.Vector3()).crossVectors(nodes[0].coords, nodes[1].coords).normalize()
+    const riverPathGeometry = new THREE.Geometry()
+    multiuseSpherical.set(nodes[0].h + planetR + 0.1, Math.PI * (nodes[0].point[1] + 90) / 180, Math.PI * nodes[0].point[0] / 180)
+    const v0 = (new THREE.Vector3()).setFromSpherical(multiuseSpherical)
+    riverPathGeometry.vertices.push(v0)
+    riverPathGeometry.vertices.push(nodes[1].coords.clone().sub(cross.clone().multiplyScalar(r)))
+    riverPathGeometry.vertices.push(nodes[1].coords.clone().add(cross.clone().multiplyScalar(r)))
+    riverPathGeometry.faces.push(new THREE.Face3(0, 1, 2))
+    riverPathGeometry.computeFaceNormals()
+    const riverPathObject = new THREE.Mesh(riverPathGeometry, riverMaterial)
+    scene.add(riverPathObject)
+    console.log("River added")
+  }
+  riverNodes.forEach(planetNode => {
+    let chosenNeighbor = null
+    let chosenNeighborH = planetNode.h
+    delaunay.neighbors[planetNode.i].forEach(neighborIndex => {
+      const neighborNode = planetNodes[neighborIndex]
+      if (neighborNode.h < 0 && neighborNode.h < chosenNeighborH) {
+        chosenNeighborH = neighborNode.h
+        chosenNeighbor = neighborNode
+      }
+    })
+    if (chosenNeighbor) {
+      /*
+      const radiusTop = (planetNode.waterFlowInFull + chosenNeighbor.moistureDrop) / moistureDropRange[1]
+      const radiusBottom = planetNode.waterFlowInFull / moistureDropRange[1]
+      const dirVector = (new THREE.Vector3()).subVectors(chosenNeighbor.coords, planetNode.coords)
+      const riverGeometry = new THREE.CylinderGeometry(radiusTop, radiusBottom, dirVector.length(), 8)
+      const riverObject = new THREE.Mesh(riverGeometry, riverMaterial)
+      riverObject.quaternion.setFromUnitVectors(axis, dirVector.clone().normalize())
+      riverObject.position.copy(dirVector.clone().multiplyScalar(0.5).add(planetNode.coords))
+      console.log("Added river")
+      scene.add(riverObject)
+      */
+      /*
+      const riverLineGeometry = new THREE.Geometry()
+      const spherical0 = new THREE.Spherical(planetNode.h + planetR + 0.1, Math.PI * (planetNode.point[1] + 90) / 180, 2 * Math.PI * (planetNode.point[0] + 180) / 360)
+      const v0 = (new THREE.Vector3()).setFromSpherical(spherical0)
+      riverLineGeometry.vertices.push(v0)
+      riverLineGeometry.vertices.push(chosenNeighbor.coords.clone())
+      const riverLineObject = new THREE.Line(riverLineGeometry, riverLineMaterial)
+      scene.add(riverLineObject)
+      */
+      riverFromNodes([planetNode, chosenNeighbor])
+    }
+  })
 
   // Faces
   let biomesUsedSum = 0
@@ -343,8 +423,14 @@ export default function createPlanet (scene) {
       return color
     })
   }
+  const nodeTriangles = planetNodes.map(() => [])
+  const planetTriangles = []
   for (let i = 0; i < delaunay.triangles.length; i++) {
     const indexes = [delaunay.triangles[i][0], delaunay.triangles[i][1], delaunay.triangles[i][2]]
+    nodeTriangles[indexes[0]].push(i)
+    nodeTriangles[indexes[1]].push(i)
+    nodeTriangles[indexes[2]].push(i)
+    planetTriangles.push(new THREE.Triangle(planetNodes[indexes[0]].coords, planetNodes[indexes[1]].coords, planetNodes[indexes[2]].coords))
     const face = new THREE.Face3(indexes[0], indexes[1], indexes[2])
     face.vertexColors = vertexColorsForIndexes(indexes)
     planetLandGeometry.faces.push(face)
@@ -352,7 +438,7 @@ export default function createPlanet (scene) {
     oceanGeometry.faces.push(oceanFace)
   }
 
-  //Object.keys(biomesUsed).forEach(key => biomesUsed[key] = Math.round(100 * biomesUsed[key] / biomesUsedSum))
+  Object.keys(biomesUsed).forEach(key => biomesUsed[key] = Math.round(100 * biomesUsed[key] / biomesUsedSum))
   console.log("biomesUsed: ", biomesUsed)
 
   // Land Object
@@ -370,16 +456,58 @@ export default function createPlanet (scene) {
   // Ocean Object
   //const oceanGeometry = new THREE.SphereGeometry(planetR, 32, 32)
   oceanGeometry.computeFaceNormals()
-  const oceanMaterial = new THREE.MeshLambertMaterial({ color: 0x3355ee })
+  const oceanMaterial = new THREE.MeshLambertMaterial({ color: 0x3355ee, flatShading: true })
   const oceanObject = new THREE.Mesh(oceanGeometry, oceanMaterial)
   scene.add(oceanObject)
 
   // River nodes
-  const riverMaterial = new THREE.MeshLambertMaterial({ color: 0x4488ff })
+  /*
+  const riverNodeMaterial = new THREE.MeshLambertMaterial({ color: 0x4488ff })
   riverNodes.forEach(planetNode => {
-    const riverNodeGeometry = new THREE.SphereGeometry(planetR / 100, 8, 8)
-    const riverNodeObject = new THREE.Mesh(riverNodeGeometry, riverMaterial)
+    const riverNodeGeometry = new THREE.SphereGeometry((planetNode.waterFlowInFull / moistureDropRange[1]) + 1, 8, 8)
+    const riverNodeObject = new THREE.Mesh(riverNodeGeometry, riverNodeMaterial)
     riverNodeObject.position.set(planetNode.coords.x, planetNode.coords.y, planetNode.coords.z)
     scene.add(riverNodeObject)
   })
+  */
+
+  const elevationAt = (lon, lat, point) => {
+    const foundIndex = delaunay.find(lon, lat)
+    let p = point
+    if (!point) {
+      multiuseSpherical.set(planetR, Math.PI * (lat + 90) / 180, Math.PI * lon / 180)
+      multiuseVector3.setFromSpherical(multiuseSpherical)
+      p = multiuseVector3
+    }
+    const foundTriangleIndex = nodeTriangles[foundIndex].find(triangleIndex => planetTriangles[triangleIndex].containsPoint(p))
+    if (foundTriangleIndex === undefined) return null
+    const triangle = planetTriangles[foundTriangleIndex]
+    const delaunayTriangle = delaunay.triangles[foundTriangleIndex]
+    triangle.getBarycoord(p, multiuseVector3)
+    return planetNodes[delaunayTriangle[0]].h * multiuseVector3.x + planetNodes[delaunayTriangle[1]].h * multiuseVector3.y + planetNodes[delaunayTriangle[2]].h * multiuseVector3.z
+  }
+
+  const planet = {
+    sphere: new THREE.Sphere(new THREE.Vector3(0, 0, 0), planetR),
+    markerAt: point => {
+      multiuseSpherical.setFromVector3(point)
+      const lon = 180 * multiuseSpherical.theta / Math.PI
+      const lat = (180 * multiuseSpherical.phi / Math.PI) - 90
+      const markerNodes = []
+      markerNodes.push({ h: elevationAt(lon, lat, point), lon: lon, lat: lat })
+      markerNodes.push({ h: elevationAt(lon + 1, lat + 1), lon: lon + 1, lat: lat + 1})
+      markerNodes.push({ h: elevationAt(lon + 1, lat - 1), lon: lon + 1, lat: lat - 1})
+      markerNodes.push({ h: elevationAt(lon - 1, lat - 1), lon: lon - 1, lat: lat - 1})
+      markerNodes.push({ h: elevationAt(lon - 1, lat + 1), lon: lon - 1, lat: lat + 1})
+      markerNodes.forEach(markerNode => {
+        multiuseSpherical.set(planetR + markerNode.h + 10, Math.PI * (markerNode.lat + 90) / 180, Math.PI * markerNode.lon / 180)
+        multiuseVector3.setFromSpherical(multiuseSpherical)
+        markerNode.p = multiuseVector3.clone()
+      })
+      console.log(markerNodes)
+      return markerNodes
+    }
+  }
+
+  return planet
 }

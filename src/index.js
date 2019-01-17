@@ -17,6 +17,7 @@ const raycaster = new THREE.Raycaster()
 const mouse = new THREE.Vector2()
 const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1))
 const planeIntersection = new THREE.Vector3()
+const sphereIntersection = new THREE.Vector3()
 
 const groundGeometry = new THREE.PlaneGeometry(2000, 2000, 2, 2)
 const groundMaterial = new THREE.MeshBasicMaterial({ color: 0x2244dd, side: THREE.FrontSide })
@@ -27,7 +28,7 @@ const roadSegments = []
 const roadSegmentNodes = []
 const buttonPanelHeight = 60
 
-const cameraSpherical = new THREE.Spherical(400, Math.PI / 2, 0)
+const cameraSpherical = new THREE.Spherical(300, Math.PI / 2, 0)
 camera.position.setFromSpherical(cameraSpherical)
 camera.lookAt(0, 0, 0)
 
@@ -37,16 +38,32 @@ scene.add(directionalLight)
 
 renderer.setSize(window.innerWidth, window.innerHeight - buttonPanelHeight)
 
+const planetMarkerGeometry = new THREE.Geometry()
+planetMarkerGeometry.vertices.push(new THREE.Vector3(0, 0, 200))
+planetMarkerGeometry.vertices.push(new THREE.Vector3(10, 10, 200))
+planetMarkerGeometry.vertices.push(new THREE.Vector3(10, -10, 200))
+planetMarkerGeometry.vertices.push(new THREE.Vector3(-10, -10, 200))
+planetMarkerGeometry.vertices.push(new THREE.Vector3(-10, 10, 200))
+planetMarkerGeometry.faces.push(new THREE.Face3(0, 2, 1))
+planetMarkerGeometry.faces.push(new THREE.Face3(0, 3, 2))
+planetMarkerGeometry.faces.push(new THREE.Face3(0, 4, 3))
+planetMarkerGeometry.faces.push(new THREE.Face3(0, 1, 4))
+planetMarkerGeometry.computeFaceNormals()
+const planetMarkerMaterial = new THREE.MeshBasicMaterial({ color: 0xee5533 })
+const planetMarkerObject = new THREE.Mesh(planetMarkerGeometry, planetMarkerMaterial)
+scene.add(planetMarkerObject)
+
 //scene.add(groundObject)
 //createLand(scene)
-createPlanet(scene)
+const planet = createPlanet(scene)
 
 // DOM
 const canvas = document.getElementById('canvas')
 const cancelButton = document.getElementById('cancelButton')
 canvas.appendChild(renderer.domElement)
 const stateButtons = {
-  addRoadButton: document.getElementById('addRoadButton')
+  addRoadButton: document.getElementById('addRoadButton'),
+  pointOnSphereButton: document.getElementById('pointOnSphereButton')
 }
 
 // Functions
@@ -56,6 +73,20 @@ const eventToPosition = function(event) {
   raycaster.setFromCamera(mouse, camera)
   raycaster.ray.intersectPlane(plane, planeIntersection)
   return planeIntersection
+}
+
+const eventToSpherePosition = function(event) {
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1
+  mouse.y = -(event.clientY / (window.innerHeight - buttonPanelHeight)) * 2 + 1
+  raycaster.setFromCamera(mouse, camera)
+  if (!raycaster.ray.intersectSphere(planet.sphere, sphereIntersection)) {
+    return null
+  }
+  const markerNodes = planet.markerAt(sphereIntersection)
+  markerNodes.forEach((n, i) => planetMarkerObject.geometry.vertices[i].copy(n.p))
+  planetMarkerObject.geometry.computeFaceNormals()
+  planetMarkerObject.geometry.verticesNeedUpdate = true
+  planetMarkerObject.geometry.normalsNeedUpdate = true
 }
 
 const onRightButton = function (event) {
@@ -100,18 +131,28 @@ const click$ = Rx.fromEvent(canvas, 'click')
 const keydown$ = Rx.fromEvent(document, 'keydown').pipe(Op.map(ev => ({ key: ev.key, v: 1 })))
 const keyup$ = Rx.fromEvent(document, 'keyup').pipe(Op.map(ev => ({ key: ev.key, v: 0 })))
 const addRoadButton$ = Rx.fromEvent(stateButtons.addRoadButton, 'click').pipe(Op.mapTo('addRoad'))
+const pointOnSphereButton$ = Rx.fromEvent(stateButtons.pointOnSphereButton, 'click').pipe(Op.mapTo('pointOnSphere'))
 const cancelButton$ = Rx.fromEvent(cancelButton, 'click')
 const rightButton$ = Rx.fromEvent(canvas, 'contextmenu')
 const cancel$ = Rx.merge(cancelButton$, rightButton$).pipe(Op.mapTo('null'))
-const state$ = Rx.merge(addRoadButton$, cancel$).pipe(
+const state$ = Rx.merge(addRoadButton$, pointOnSphereButton$, cancel$).pipe(
   Op.startWith('null'),
   Op.map(state => ({ state })),
   Op.pairwise(),
-  Op.map(roadBuilder.handleStateTransition.bind(roadBuilder)),
+  //Op.map(roadBuilder.handleStateTransition.bind(roadBuilder)),
+  Op.map(([fromState, toState]) => toState ),
   Op.share()
 )
 const distinctState$ = state$.pipe(Op.distinctUntilKeyChanged('state'), Op.share())
 const addRoadState$ = distinctState$.pipe(Op.filter(s => s.state === 'addRoad'))
+const pointOnSphereState$ = distinctState$.pipe(Op.filter(s => s.state === 'pointOnSphere'))
+
+pointOnSphereState$.subscribe(state => {
+  console.log('Point on sphere: ', state)
+  const sphereMarkerFromMove$ = mouseMove$.pipe(
+    Op.map(eventToSpherePosition),
+  ).subscribe()
+})
 
 addRoadState$.subscribe(state => {
   console.log('Building road: ', state)
