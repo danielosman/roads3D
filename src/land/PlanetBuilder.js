@@ -11,6 +11,7 @@ const maxContinentHeight = planetR / 100
 const maxContinentDir = 2
 const continentForceFactor = 0.5
 const nContinents = 8
+const nSmallContinents = 8
 
 const temperatureDropAtLatitude = scaleLinear().domain([-90, -60, -30, 0, 30, 60, 90]).range([50, 24, 6, 0, 6, 24, 50])
 const temperatureDropAtAltitude = scaleLinear().domain([-maxContinentHeight, 0, maxContinentHeight]).range([0, 0, 15])
@@ -49,6 +50,9 @@ const biomesUsed = {
 const erosionHeigh2WetMoistureScale = scaleLinear().domain([0, 1]).range([0, 0.75]).clamp(true)
 const erosionWet2WaterMoistureScale = scaleLinear().domain([0, 1]).range([0, 0.75]).clamp(true)
 const erosionHeighWet2WhateverMoistureScale = scaleLinear().domain([0, 1]).range([0, 0.75]).clamp(true)
+
+const multiuseSpherical = new THREE.Spherical()
+const multiuseVector3 = new THREE.Vector3()
 
 export default function createPlanet (scene) {
   const planetPoints = [[(2 * Math.random() - 1) * 180, (2 * Math.random() - 1) * 90]]
@@ -95,14 +99,17 @@ export default function createPlanet (scene) {
 
   // Continents
   const continents = []
-  for (let i = 0; i < nContinents; i++) {
+  const createContinent = i => {
     const dirX = (2 * Math.random() - 1) * maxContinentDir
     const dirY = (2 * Math.random() - 1) * maxContinentDir
     const dir = new THREE.Vector2(dirX, dirY)
     const len = dir.length()
     let nodeIndex = -1
+    let ii = 0
     while ((nodeIndex < 0) || (planetNodes[nodeIndex].continent !== -1)) {
       nodeIndex = Math.floor(Math.random() * planetNodes.length)
+      ii++
+      if (ii > nSamples) return
     }
     planetNodes[nodeIndex].continent = i
     let h = 0
@@ -111,25 +118,53 @@ export default function createPlanet (scene) {
     } else {
       h = maxContinentHeight * (Math.random() * 0.9 + 0.1)
     }
-    const continent = { nodes: [nodeIndex], h, dir, len }
-    continents.push(continent)
+    return { nodes: [nodeIndex], h, dir, len, isExpanding: true, nodeIndexToExpand: 0, size: 1 }
+  }
+  for (let i = 0; i < nContinents; i++) {
+    const continent = createContinent(i)
+    if (continent) continents.push(continent)
   }
 
   // Expand continents
-  planetNodes.forEach(function (node, i) {
+  let nNotExpandingContinents = 0
+  const addSmallContinentsProbabilityDelta = (nContinents / nPoints) * nSmallContinents / 2
+  let addSmallContinentsProbability = -addSmallContinentsProbabilityDelta
+  let nSmallContinentsAdded = 0
+  while (nNotExpandingContinents < continents.length) {
     continents.forEach(function (continent, continentIndex) {
-      if (i < continent.nodes.length) {
-        const neighbors = Array.from(delaunay.neighbors[continent.nodes[i]])
+      if (continent.isExpanding) {
+        const nodeIndex = continent.nodes[continent.nodeIndexToExpand]
+        planetNodes[nodeIndex].h += continent.h + (Math.random() - 0.5) * maxContinentHeight / 10
+        const neighbors = Array.from(delaunay.neighbors[nodeIndex])
         neighbors.forEach(function (neighbor) {
           if (planetNodes[neighbor].continent === -1) {
             planetNodes[neighbor].continent = continentIndex
             continent.nodes.push(neighbor)
+            continent.size++
           }
         })
-        planetNodes[continent.nodes[i]].h += continent.h
+        continent.nodeIndexToExpand++
+        if (continent.nodeIndexToExpand >= continent.nodes.length) {
+          nNotExpandingContinents++
+          delete continent.isExpanding
+          delete continent.nodeIndexToExpand
+        }
       }
     })
-  })
+    if (nSmallContinentsAdded < nSmallContinents) {
+      addSmallContinentsProbability += addSmallContinentsProbabilityDelta
+      if (Math.random() < addSmallContinentsProbability) {
+        addSmallContinentsProbability = -addSmallContinentsProbabilityDelta
+        const continent = createContinent(continents.length)
+        if (continent) {
+          continents.push(continent)
+          nSmallContinentsAdded++
+          console.log("Added small continent: ", nSmallContinentsAdded)
+        }
+      }
+    }
+  }
+  console.log("Continents: ", continents)
 
   // Heights based on tectonics
   const forceFactor = continentForceFactor * maxContinentHeight / maxContinentDir
@@ -149,21 +184,21 @@ export default function createPlanet (scene) {
       dirVector.set(planetPoints[p1Index][0] - planetPoints[p0Index][0], planetPoints[p1Index][1] - planetPoints[p0Index][1]).normalize()
       force = dirVector.dot(continents[c0Index].dir)
       force -= dirVector.dot(continents[c1Index].dir)
-      dh = forceFactor * force + (Math.random() - 0.5) * maxContinentHeight / 10
+      dh = forceFactor * force
       planetNodes[p0Index].h += dh
       planetNodes[p1Index].h += dh
       // 1 -> 2
       dirVector.set(planetPoints[p2Index][0] - planetPoints[p1Index][0], planetPoints[p2Index][1] - planetPoints[p1Index][1]).normalize()
       force = dirVector.dot(continents[c1Index].dir)
       force -= dirVector.dot(continents[c2Index].dir)
-      dh = forceFactor * force + (Math.random() - 0.5) * maxContinentHeight / 10
+      dh = forceFactor * force
       planetNodes[p1Index].h += dh
       planetNodes[p2Index].h += dh
       // 0 -> 2
       dirVector.set(planetPoints[p2Index][0] - planetPoints[p2Index][0], planetPoints[p1Index][1] - planetPoints[p0Index][1]).normalize()
       force = dirVector.dot(continents[c0Index].dir)
       force -= dirVector.dot(continents[c2Index].dir)
-      dh = forceFactor * force + (Math.random() - 0.5) * maxContinentHeight / 10
+      dh = forceFactor * force
       planetNodes[p0Index].h += dh
       planetNodes[p2Index].h += dh
     }
@@ -285,14 +320,14 @@ export default function createPlanet (scene) {
   planetNodes.forEach(planetNode => {
     // Planet Vertices
     const planetNodeCoords = new THREE.Vector3(0, 0, 0)
-    let spherical = new THREE.Spherical(planetNode.h + planetR, Math.PI * (planetNode.point[1] + 90) / 180, 2 * Math.PI * (planetNode.point[0] + 180) / 360)
-    planetNodeCoords.setFromSpherical(spherical)
+    multiuseSpherical.set(planetNode.h + planetR, Math.PI * (planetNode.point[1] + 90) / 180, Math.PI * planetNode.point[0] / 180)
+    planetNodeCoords.setFromSpherical(multiuseSpherical)
     planetNode.coords = planetNodeCoords
     planetLandGeometry.vertices.push(planetNodeCoords)
     // Ocean Vertices
     const oceanNodeCoords = new THREE.Vector3(0, 0, 0)
-    spherical = new THREE.Spherical(planetR, Math.PI * (planetNode.point[1] + 90) / 180, 2 * Math.PI * (planetNode.point[0] + 180) / 360)
-    oceanNodeCoords.setFromSpherical(spherical)
+    multiuseSpherical.set(planetR, Math.PI * (planetNode.point[1] + 90) / 180, Math.PI * planetNode.point[0] / 180)
+    oceanNodeCoords.setFromSpherical(multiuseSpherical)
     oceanGeometry.vertices.push(oceanNodeCoords)
     // River nodes
     if (planetNode.waterFlowIn > 3) {
@@ -323,8 +358,8 @@ export default function createPlanet (scene) {
     const dir = (new THREE.Vector3()).subVectors(nodes[1].coords, nodes[0].coords)
     const cross = (new THREE.Vector3()).crossVectors(nodes[0].coords, nodes[1].coords).normalize()
     const riverPathGeometry = new THREE.Geometry()
-    const spherical0 = new THREE.Spherical(nodes[0].h + planetR + 0.1, Math.PI * (nodes[0].point[1] + 90) / 180, 2 * Math.PI * (nodes[0].point[0] + 180) / 360)
-    const v0 = (new THREE.Vector3()).setFromSpherical(spherical0)
+    multiuseSpherical.set(nodes[0].h + planetR + 0.1, Math.PI * (nodes[0].point[1] + 90) / 180, Math.PI * nodes[0].point[0] / 180)
+    const v0 = (new THREE.Vector3()).setFromSpherical(multiuseSpherical)
     riverPathGeometry.vertices.push(v0)
     riverPathGeometry.vertices.push(nodes[1].coords.clone().sub(cross.clone().multiplyScalar(r)))
     riverPathGeometry.vertices.push(nodes[1].coords.clone().add(cross.clone().multiplyScalar(r)))
@@ -388,8 +423,14 @@ export default function createPlanet (scene) {
       return color
     })
   }
+  const nodeTriangles = planetNodes.map(() => [])
+  const planetTriangles = []
   for (let i = 0; i < delaunay.triangles.length; i++) {
     const indexes = [delaunay.triangles[i][0], delaunay.triangles[i][1], delaunay.triangles[i][2]]
+    nodeTriangles[indexes[0]].push(i)
+    nodeTriangles[indexes[1]].push(i)
+    nodeTriangles[indexes[2]].push(i)
+    planetTriangles.push(new THREE.Triangle(planetNodes[indexes[0]].coords, planetNodes[indexes[1]].coords, planetNodes[indexes[2]].coords))
     const face = new THREE.Face3(indexes[0], indexes[1], indexes[2])
     face.vertexColors = vertexColorsForIndexes(indexes)
     planetLandGeometry.faces.push(face)
@@ -429,4 +470,44 @@ export default function createPlanet (scene) {
     scene.add(riverNodeObject)
   })
   */
+
+  const elevationAt = (lon, lat, point) => {
+    const foundIndex = delaunay.find(lon, lat)
+    let p = point
+    if (!point) {
+      multiuseSpherical.set(planetR, Math.PI * (lat + 90) / 180, Math.PI * lon / 180)
+      multiuseVector3.setFromSpherical(multiuseSpherical)
+      p = multiuseVector3
+    }
+    const foundTriangleIndex = nodeTriangles[foundIndex].find(triangleIndex => planetTriangles[triangleIndex].containsPoint(p))
+    if (foundTriangleIndex === undefined) return null
+    const triangle = planetTriangles[foundTriangleIndex]
+    const delaunayTriangle = delaunay.triangles[foundTriangleIndex]
+    triangle.getBarycoord(p, multiuseVector3)
+    return planetNodes[delaunayTriangle[0]].h * multiuseVector3.x + planetNodes[delaunayTriangle[1]].h * multiuseVector3.y + planetNodes[delaunayTriangle[2]].h * multiuseVector3.z
+  }
+
+  const planet = {
+    sphere: new THREE.Sphere(new THREE.Vector3(0, 0, 0), planetR),
+    markerAt: point => {
+      multiuseSpherical.setFromVector3(point)
+      const lon = 180 * multiuseSpherical.theta / Math.PI
+      const lat = (180 * multiuseSpherical.phi / Math.PI) - 90
+      const markerNodes = []
+      markerNodes.push({ h: elevationAt(lon, lat, point), lon: lon, lat: lat })
+      markerNodes.push({ h: elevationAt(lon + 1, lat + 1), lon: lon + 1, lat: lat + 1})
+      markerNodes.push({ h: elevationAt(lon + 1, lat - 1), lon: lon + 1, lat: lat - 1})
+      markerNodes.push({ h: elevationAt(lon - 1, lat - 1), lon: lon - 1, lat: lat - 1})
+      markerNodes.push({ h: elevationAt(lon - 1, lat + 1), lon: lon - 1, lat: lat + 1})
+      markerNodes.forEach(markerNode => {
+        multiuseSpherical.set(planetR + markerNode.h + 10, Math.PI * (markerNode.lat + 90) / 180, Math.PI * markerNode.lon / 180)
+        multiuseVector3.setFromSpherical(multiuseSpherical)
+        markerNode.p = multiuseVector3.clone()
+      })
+      console.log(markerNodes)
+      return markerNodes
+    }
+  }
+
+  return planet
 }
