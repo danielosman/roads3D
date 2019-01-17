@@ -500,7 +500,7 @@ export default function createPlanet (scene) {
       markerNodes.push({ h: elevationAt(lon - 1, lat - 1), lon: lon - 1, lat: lat - 1})
       markerNodes.push({ h: elevationAt(lon - 1, lat + 1), lon: lon - 1, lat: lat + 1})
       markerNodes.forEach(markerNode => {
-        multiuseSpherical.set(planetR + markerNode.h + 10, Math.PI * (markerNode.lat + 90) / 180, Math.PI * markerNode.lon / 180)
+        multiuseSpherical.set(planetR + markerNode.h + 0.1, Math.PI * (markerNode.lat + 90) / 180, Math.PI * markerNode.lon / 180)
         multiuseVector3.setFromSpherical(multiuseSpherical)
         markerNode.p = multiuseVector3.clone()
       })

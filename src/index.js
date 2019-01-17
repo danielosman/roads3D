@@ -49,7 +49,7 @@ planetMarkerGeometry.faces.push(new THREE.Face3(0, 3, 2))
 planetMarkerGeometry.faces.push(new THREE.Face3(0, 4, 3))
 planetMarkerGeometry.faces.push(new THREE.Face3(0, 1, 4))
 planetMarkerGeometry.computeFaceNormals()
-const planetMarkerMaterial = new THREE.MeshBasicMaterial({ color: 0xee5533 })
+const planetMarkerMaterial = new THREE.MeshBasicMaterial({ color: 0xee5533, side: THREE.DoubleSide })
 const planetMarkerObject = new THREE.Mesh(planetMarkerGeometry, planetMarkerMaterial)
 scene.add(planetMarkerObject)
 
