@@ -38,6 +38,7 @@ scene.add(directionalLight)
 
 renderer.setSize(window.innerWidth, window.innerHeight - buttonPanelHeight)
 
+/*
 const planetMarkerGeometry = new THREE.Geometry()
 planetMarkerGeometry.vertices.push(new THREE.Vector3(0, 0, 200))
 planetMarkerGeometry.vertices.push(new THREE.Vector3(10, 10, 200))
@@ -49,6 +50,8 @@ planetMarkerGeometry.faces.push(new THREE.Face3(0, 3, 2))
 planetMarkerGeometry.faces.push(new THREE.Face3(0, 4, 3))
 planetMarkerGeometry.faces.push(new THREE.Face3(0, 1, 4))
 planetMarkerGeometry.computeFaceNormals()
+*/
+const planetMarkerGeometry = new THREE.SphereGeometry(1, 8, 8)
 const planetMarkerMaterial = new THREE.MeshBasicMaterial({ color: 0xee5533, side: THREE.DoubleSide })
 const planetMarkerObject = new THREE.Mesh(planetMarkerGeometry, planetMarkerMaterial)
 scene.add(planetMarkerObject)
@@ -83,10 +86,13 @@ const eventToSpherePosition = function(event) {
     return null
   }
   const markerNodes = planet.markerAt(sphereIntersection)
+  /*
   markerNodes.forEach((n, i) => planetMarkerObject.geometry.vertices[i].copy(n.p))
   planetMarkerObject.geometry.computeFaceNormals()
   planetMarkerObject.geometry.verticesNeedUpdate = true
   planetMarkerObject.geometry.normalsNeedUpdate = true
+  */
+  planetMarkerObject.position.copy(markerNodes[0].p)
 }
 
 const onRightButton = function (event) {

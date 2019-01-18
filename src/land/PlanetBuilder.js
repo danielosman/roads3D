@@ -423,6 +423,7 @@ export default function createPlanet (scene) {
       return color
     })
   }
+  const planetLandUVs = []
   const nodeTriangles = planetNodes.map(() => [])
   const planetTriangles = []
   for (let i = 0; i < delaunay.triangles.length; i++) {
@@ -434,21 +435,37 @@ export default function createPlanet (scene) {
     const face = new THREE.Face3(indexes[0], indexes[1], indexes[2])
     face.vertexColors = vertexColorsForIndexes(indexes)
     planetLandGeometry.faces.push(face)
+    const uvs = indexes.map(index => new THREE.Vector2((planetNodes[index].point[0] + 180) / 360, (planetNodes[index].point[1] + 90) / 180))
+    planetLandUVs.push(uvs)
     const oceanFace = new THREE.Face3(indexes[0], indexes[1], indexes[2])
     oceanGeometry.faces.push(oceanFace)
   }
+  planetLandGeometry.faceVertexUvs[0] = planetLandUVs
 
   Object.keys(biomesUsed).forEach(key => biomesUsed[key] = Math.round(100 * biomesUsed[key] / biomesUsedSum))
   console.log("biomesUsed: ", biomesUsed)
 
+  // Land texture
+  const canvas = document.createElement('canvas')
+  canvas.width = 128
+  canvas.height = 128
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = 'white'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.fillStyle = 'red'
+  ctx.fillRect(10, 10, 30, 80)
+  const canvasTexture = new THREE.CanvasTexture(canvas)
+
   // Land Object
   planetLandGeometry.computeFaceNormals()
   //planetLandGeometry.computeVertexNormals()
+  planetLandGeometry.computeFlatVertexNormals()
   const planetLandMaterial = new THREE.MeshLambertMaterial({
     color: 0xd4c5ad,
     wireframe: false,
     vertexColors: THREE.VertexColors,
-    flatShading: true
+    flatShading: true,
+    map: canvasTexture
   })
   const planetLandObject = new THREE.Mesh(planetLandGeometry, planetLandMaterial)
   scene.add(planetLandObject)
@@ -471,6 +488,25 @@ export default function createPlanet (scene) {
   })
   */
 
+  // Equator
+  const equatorR = planetR + 0.1
+  const equatorC = 0.55191502449
+  const equatorCurve = new THREE.CurvePath()
+  equatorCurve.add(new THREE.CubicBezierCurve3(new THREE.Vector3(-equatorR, 0, 0), new THREE.Vector3(-equatorR, 0, equatorR * equatorC), new THREE.Vector3(-equatorR * equatorC, 0, equatorR), new THREE.Vector3(0, 0, equatorR)))
+  equatorCurve.add(new THREE.CubicBezierCurve3(new THREE.Vector3(0, 0, equatorR), new THREE.Vector3(equatorR * equatorC, 0, equatorR), new THREE.Vector3(equatorR, 0, equatorR * equatorC), new THREE.Vector3(equatorR, 0, 0)))
+  equatorCurve.add(new THREE.CubicBezierCurve3(new THREE.Vector3(equatorR, 0, 0), new THREE.Vector3(equatorR, 0, -equatorR * equatorC), new THREE.Vector3(equatorR * equatorC, 0, -equatorR), new THREE.Vector3(0, 0, -equatorR)))
+  equatorCurve.add(new THREE.CubicBezierCurve3(new THREE.Vector3(0, 0, -equatorR), new THREE.Vector3(-equatorR * equatorC, 0, -equatorR), new THREE.Vector3(-equatorR, 0, -equatorR * equatorC), new THREE.Vector3(-equatorR, 0, 0)))
+  const equatorCurveGeometry = new THREE.BufferGeometry().setFromPoints(equatorCurve.getPoints(16))
+  const equatorCurveMaterial = new THREE.LineBasicMaterial({ color : 0xffffff })
+  const equatorCurveObject = new THREE.Line(equatorCurveGeometry, equatorCurveMaterial)
+  scene.add(equatorCurveObject)
+  const polarCurve = new THREE.LineCurve3(new THREE.Vector3(0, 1.1 * planetR, 0), new THREE.Vector3(0, -planetR * 1.1, 0))
+  const polarCurveGeometry = new THREE.BufferGeometry().setFromPoints(polarCurve.getPoints(2))
+  const polarCurveMaterial = new THREE.LineBasicMaterial({ color : 0xffffff })
+  const polarCurveObject = new THREE.Line(polarCurveGeometry, polarCurveMaterial)
+  scene.add(polarCurveObject)
+
+  // Return
   const elevationAt = (lon, lat, point) => {
     const foundIndex = delaunay.find(lon, lat)
     let p = point
@@ -504,7 +540,6 @@ export default function createPlanet (scene) {
         multiuseVector3.setFromSpherical(multiuseSpherical)
         markerNode.p = multiuseVector3.clone()
       })
-      console.log(markerNodes)
       return markerNodes
     }
   }
