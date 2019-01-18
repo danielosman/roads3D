@@ -447,13 +447,13 @@ export default function createPlanet (scene) {
 
   // Land texture
   const canvas = document.createElement('canvas')
-  canvas.width = 128
-  canvas.height = 128
+  canvas.width = 1024
+  canvas.height = 1024
   const ctx = canvas.getContext('2d')
   ctx.fillStyle = 'white'
   ctx.fillRect(0, 0, canvas.width, canvas.height)
   ctx.fillStyle = 'red'
-  ctx.fillRect(10, 10, 30, 80)
+  ctx.fillRect(10, 10, 1000, 10)
   const canvasTexture = new THREE.CanvasTexture(canvas)
 
   // Land Object
