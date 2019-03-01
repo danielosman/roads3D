@@ -2,7 +2,8 @@ import { join } from 'path'
 
 export default {
   entry: {
-    'bundle': join(__dirname, 'src', 'index.js')
+    'planets': join(__dirname, 'src', 'index.js'),
+    'roads': join(__dirname, 'src', 'roads.js')
   },
   output: {
     path: join(__dirname, 'public'),

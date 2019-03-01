@@ -1,12 +1,13 @@
 import * as THREE from "three"
 import { geoDelaunay } from 'd3-geo-voronoi'
 import { scaleThreshold, scaleLinear, scaleQuantize } from 'd3-scale'
+import { extent } from 'd3-array'
 import { geoDistance } from 'd3-geo'
 
 const planetR = 100
 const maxTemperature = 40
 const nSamples = 25
-const nPoints = 614
+const nPoints = 400
 const maxContinentHeight = planetR / 100
 const maxContinentDir = 2
 const continentForceFactor = 0.5
@@ -55,7 +56,8 @@ const multiuseSpherical = new THREE.Spherical()
 const multiuseVector3 = new THREE.Vector3()
 
 export default function createPlanet (scene) {
-  const planetPoints = [[(2 * Math.random() - 1) * 180, (2 * Math.random() - 1) * 90]]
+  const perfT0 = performance.now()
+  const planetPoints = [[-180, 0], [0, 90], [0, -90]]
   for (let i = 0; i < nPoints; i++) {
     let chosenSample0 = null
     let maxDistance = 0
@@ -76,6 +78,11 @@ export default function createPlanet (scene) {
     }
     planetPoints.push(chosenSample0)
   }
+  const perfT1 = performance.now()
+  console.log("planetPoints time: ", perfT1 - perfT0)
+  const lonExtent = extent(planetPoints, point => point[0])
+  const latExtent = extent(planetPoints, point => point[1])
+  //console.log("lon, lat extents: ", lonExtent, latExtent)
 
   // Lights
   const directionalLight = new THREE.DirectionalLight(0xffffff, 0.75)
@@ -83,6 +90,9 @@ export default function createPlanet (scene) {
   scene.add(directionalLight)
   const ambientLight = new THREE.AmbientLight(0x404040)
   scene.add(ambientLight)
+
+  const perfT2 = performance.now()
+  console.log("Lights time: ", perfT2 - perfT1)
 
   // Initialize planet nodes
   const planetLandGeometry = new THREE.Geometry()
@@ -96,6 +106,9 @@ export default function createPlanet (scene) {
     moisture: 0,
     waterFlowIn: 0
   }))
+
+  const perfT3 = performance.now()
+  console.log("Delaunay time: ", perfT3 - perfT2)
 
   // Continents
   const continents = []
@@ -159,12 +172,14 @@ export default function createPlanet (scene) {
         if (continent) {
           continents.push(continent)
           nSmallContinentsAdded++
-          console.log("Added small continent: ", nSmallContinentsAdded)
+          //console.log("Added small continent: ", nSmallContinentsAdded)
         }
       }
     }
   }
-  console.log("Continents: ", continents)
+  //console.log("Continents: ", continents)
+  const perfT4 = performance.now()
+  console.log("Continents time: ", perfT4 - perfT3)
 
   // Heights based on tectonics
   const forceFactor = continentForceFactor * maxContinentHeight / maxContinentDir
@@ -204,8 +219,14 @@ export default function createPlanet (scene) {
     }
   }
 
+  const perfT5 = performance.now()
+  console.log("Tectonics time: ", perfT5 - perfT4)
+
   // Temperature
   planetNodes.forEach(planetNode => planetNode.t = maxTemperature - temperatureDropAtAltitude(planetNode.h) - temperatureDropAtLatitude(planetNode.point[1]))
+
+  const perfT51 = performance.now()
+  console.log("Temperature time: ", perfT51 - perfT5)
 
   // Moisture
   const moistureTravel = (moisture, planetNode, hops) => {
@@ -271,6 +292,9 @@ export default function createPlanet (scene) {
     }
   })
 
+  const perfT52 = performance.now()
+  console.log("Moisture time: ", perfT52 - perfT51)
+
   // Erosion
   planetNodes.forEach(planetNode => {
     if (planetNode.h <= 0) return
@@ -299,6 +323,9 @@ export default function createPlanet (scene) {
     })
   })
 
+  const perfT53 = performance.now()
+  console.log("Erosion time: ", perfT53 - perfT52)
+
   // River flows
   planetNodes.forEach(planetNode => {
     if (planetNode.h <= 0) return
@@ -314,6 +341,9 @@ export default function createPlanet (scene) {
       }
     })
   })
+
+  const perfT6 = performance.now()
+  console.log("Rivers time: ", perfT6 - perfT53)
 
   // Vertices
   const riverNodes = []
@@ -336,6 +366,9 @@ export default function createPlanet (scene) {
     }
   })
 
+  const perfT7 = performance.now()
+  console.log("Vertices time: ", perfT7 - perfT6)
+
   // Moisture Drop Range
   const moistureDropRange = [1, 0]
   planetNodes.forEach(planetNode => {
@@ -346,12 +379,13 @@ export default function createPlanet (scene) {
       moistureDropRange[1] = planetNode.moistureDrop
     }
   })
-  console.log("moistureDropRange: ", moistureDropRange)
+  //console.log("moistureDropRange: ", moistureDropRange)
 
   // Rivers
-  const riverMaterial = new THREE.MeshLambertMaterial({ color: 0x3356f0 })
-  const riverLineMaterial = new THREE.LineBasicMaterial({ color: 0x3355ee })
-  const axis = new THREE.Vector3(0, 1, 0)
+  //const riverMaterial = new THREE.MeshLambertMaterial({ color: 0x3356f0 })
+  const riverMaterial = new THREE.MeshBasicMaterial({ color: 0x3356f0 })
+  //const riverLineMaterial = new THREE.LineBasicMaterial({ color: 0x3355ee })
+  //const axis = new THREE.Vector3(0, 1, 0)
   const riverFromNodes = (nodes) => {
     //const r = ((nodes[0].waterFlowInFull + nodes[1].moistureDrop) / moistureDropRange[1]) + 1
     const r = ((nodes[0].waterFlowIn + nodes[1].moistureDrop) / (3 + moistureDropRange[1])) + 1
@@ -367,7 +401,7 @@ export default function createPlanet (scene) {
     riverPathGeometry.computeFaceNormals()
     const riverPathObject = new THREE.Mesh(riverPathGeometry, riverMaterial)
     scene.add(riverPathObject)
-    console.log("River added")
+    //console.log("River added")
   }
   riverNodes.forEach(planetNode => {
     let chosenNeighbor = null
@@ -404,6 +438,9 @@ export default function createPlanet (scene) {
     }
   })
 
+  const perfT8 = performance.now()
+  console.log("River objects time: ", perfT8 - perfT7)
+
   // Faces
   let biomesUsedSum = 0
   const vertexColorsForIndexes = indexes => {
@@ -436,31 +473,50 @@ export default function createPlanet (scene) {
     face.vertexColors = vertexColorsForIndexes(indexes)
     planetLandGeometry.faces.push(face)
     const uvs = indexes.map(index => new THREE.Vector2((planetNodes[index].point[0] + 180) / 360, (planetNodes[index].point[1] + 90) / 180))
+    if (uvs[0].x - uvs[1].x > 0.5) uvs[1].x += uvs[0].x
+    if (uvs[1].x - uvs[0].x > 0.5) uvs[0].x += uvs[1].x
+    if (uvs[0].x - uvs[2].x > 0.5) uvs[2].x += uvs[0].x
+    if (uvs[2].x - uvs[0].x > 0.5) uvs[0].x += uvs[2].x
+    if (uvs[1].x - uvs[2].x > 0.5) uvs[2].x += uvs[1].x
+    if (uvs[2].x - uvs[1].x > 0.5) uvs[1].x += uvs[2].x
     planetLandUVs.push(uvs)
     const oceanFace = new THREE.Face3(indexes[0], indexes[1], indexes[2])
     oceanGeometry.faces.push(oceanFace)
   }
   planetLandGeometry.faceVertexUvs[0] = planetLandUVs
+  oceanGeometry.faceVertexUvs[0] = planetLandUVs
+
+  const perfT9 = performance.now()
+  console.log("Faces and UVs time: ", perfT9 - perfT8)
 
   Object.keys(biomesUsed).forEach(key => biomesUsed[key] = Math.round(100 * biomesUsed[key] / biomesUsedSum))
-  console.log("biomesUsed: ", biomesUsed)
+  //console.log("biomesUsed: ", biomesUsed)
 
   // Land texture
   const canvas = document.createElement('canvas')
-  canvas.width = 1024
+  canvas.width = 2048
   canvas.height = 1024
   const ctx = canvas.getContext('2d')
   ctx.fillStyle = 'white'
   ctx.fillRect(0, 0, canvas.width, canvas.height)
-  ctx.fillStyle = 'red'
-  ctx.fillRect(10, 10, 1000, 10)
+  ctx.fillStyle = '#999999'
+  ctx.fillRect(0, canvas.height / 2, canvas.width, 1)
+  //ctx.strokeStyle = '#ff4444'
+  //ctx.strokeRect(100, 100, canvas.width / 2, canvas.height / 2)
   const canvasTexture = new THREE.CanvasTexture(canvas)
+  //canvasTexture.magFilter = THREE.NearestFilter
+  //canvasTexture.minFilter = THREE.NearestFilter
+  canvasTexture.wrapS = THREE.RepeatWrapping
+
+  const perfT10 = performance.now()
+  console.log("Texture time: ", perfT10 - perfT9)
 
   // Land Object
   planetLandGeometry.computeFaceNormals()
   //planetLandGeometry.computeVertexNormals()
   planetLandGeometry.computeFlatVertexNormals()
-  const planetLandMaterial = new THREE.MeshLambertMaterial({
+  //const planetLandMaterial = new THREE.MeshLambertMaterial({
+  const planetLandMaterial = new THREE.MeshBasicMaterial({
     color: 0xd4c5ad,
     wireframe: false,
     vertexColors: THREE.VertexColors,
@@ -471,9 +527,16 @@ export default function createPlanet (scene) {
   scene.add(planetLandObject)
 
   // Ocean Object
-  //const oceanGeometry = new THREE.SphereGeometry(planetR, 32, 32)
   oceanGeometry.computeFaceNormals()
-  const oceanMaterial = new THREE.MeshLambertMaterial({ color: 0x3355ee, flatShading: true })
+  oceanGeometry.computeFlatVertexNormals()
+  //const oceanMaterial = new THREE.MeshLambertMaterial({
+  const oceanMaterial = new THREE.MeshBasicMaterial({
+    color: 0x3355ee,
+    flatShading: true,
+    map: canvasTexture,
+    //transparent: true,
+    //opacity: 0.66
+  })
   const oceanObject = new THREE.Mesh(oceanGeometry, oceanMaterial)
   scene.add(oceanObject)
 
@@ -489,6 +552,7 @@ export default function createPlanet (scene) {
   */
 
   // Equator
+  /*
   const equatorR = planetR + 0.1
   const equatorC = 0.55191502449
   const equatorCurve = new THREE.CurvePath()
@@ -500,6 +564,7 @@ export default function createPlanet (scene) {
   const equatorCurveMaterial = new THREE.LineBasicMaterial({ color : 0xffffff })
   const equatorCurveObject = new THREE.Line(equatorCurveGeometry, equatorCurveMaterial)
   scene.add(equatorCurveObject)
+  */
   const polarCurve = new THREE.LineCurve3(new THREE.Vector3(0, 1.1 * planetR, 0), new THREE.Vector3(0, -planetR * 1.1, 0))
   const polarCurveGeometry = new THREE.BufferGeometry().setFromPoints(polarCurve.getPoints(2))
   const polarCurveMaterial = new THREE.LineBasicMaterial({ color : 0xffffff })
@@ -543,6 +608,10 @@ export default function createPlanet (scene) {
       return markerNodes
     }
   }
+
+  const perfT11 = performance.now()
+  console.log("Objects time: ", perfT11 - perfT10)
+  console.log("All time: ", perfT11 - perfT0)
 
   return planet
 }
