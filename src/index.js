@@ -4,27 +4,24 @@ import * as Op from 'rxjs/operators'
 import SphereMarkerView from './building/SphereMarkerView'
 import createPlanet from './land/PlanetBuilder'
 
+const buttonPanelHeight = 60
 const scene = new THREE.Scene()
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 5000)
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / (window.innerHeight - buttonPanelHeight), 1, 5000)
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
 
 const raycaster = new THREE.Raycaster()
 const mouse = new THREE.Vector2()
 const sphereIntersection = new THREE.Vector3()
 
-const buttonPanelHeight = 60
-
 const cameraSpherical = new THREE.Spherical(300, Math.PI / 2, 0)
 camera.position.setFromSpherical(cameraSpherical)
 camera.lookAt(0, 0, 0)
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.25)
+const directionalLight = new THREE.DirectionalLight(0xffffff, 0.95)
 directionalLight.position.set(camera.position.x, camera.position.y, camera.position.z)
 scene.add(directionalLight)
 
 renderer.setSize(window.innerWidth, window.innerHeight - buttonPanelHeight)
-
-const planet = createPlanet(scene)
 
 // DOM
 const canvas = document.getElementById('canvas')
@@ -35,7 +32,7 @@ const stateButtons = {
 }
 
 // Functions
-const eventToSpherePosition = function(event) {
+const eventToSpherePosition = function(event, planet) {
   mouse.x = (event.clientX / window.innerWidth) * 2 - 1
   mouse.y = -(event.clientY / (window.innerHeight - buttonPanelHeight)) * 2 + 1
   raycaster.setFromCamera(mouse, camera)
@@ -69,6 +66,8 @@ const state$ = Rx.merge(pointOnSphereButton$, cancel$).pipe(
 const distinctState$ = state$.pipe(Op.distinctUntilKeyChanged('state'), Op.share())
 const pointOnSphereState$ = distinctState$.pipe(Op.filter(s => s.state === 'pointOnSphere'))
 
+const planet$ = Rx.from(createPlanet(scene))
+
 const sphereMarkerView$ = Rx.of(new SphereMarkerView()).pipe(
   Op.tap(view => scene.add(view.object))
 )
@@ -76,7 +75,8 @@ const sphereMarkerView$ = Rx.of(new SphereMarkerView()).pipe(
 pointOnSphereState$.subscribe(state => {
   console.log('Point on sphere: ', state)
   mouseMove$.pipe(
-    Op.map(eventToSpherePosition),
+    Op.withLatestFrom(planet$),
+    Op.map(([event, planet]) => eventToSpherePosition(event, planet)),
     Op.withLatestFrom(sphereMarkerView$),
     Op.tap(([p, view]) => view.setPosition(p)),
     Op.takeUntil(distinctState$),
@@ -125,6 +125,7 @@ const moveCamera = function(frame, keys) {
   camera.position.setFromSpherical(cameraSpherical)
   camera.lookAt(0, 0, 0)
   directionalLight.position.set(camera.position.x, camera.position.y, camera.position.z)
+  directionalLight.lookAt(0, 0, 0)
 }
 
 animation$.pipe(
@@ -133,3 +134,8 @@ animation$.pipe(
 ).subscribe()
 
 canvas.addEventListener('contextmenu', onRightButton)
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / (window.innerHeight - buttonPanelHeight)
+  camera.updateProjectionMatrix()
+  renderer.setSize(window.innerWidth, window.innerHeight - buttonPanelHeight)
+}, false )
