@@ -1,2 +1,6 @@
 node_modules/
 .idea/
+public/planets.js
+public/planets.js.map
+public/roads.js
+public/roads.js.map

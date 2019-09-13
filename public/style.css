@@ -2,10 +2,16 @@ body {
   font-family: Arial;
   margin: 0;
   background-color: #333333;
+
+  display: flex;
 }
 
 #canvas {
   line-height: 0;
+}
+
+#editor {
+  width: 100px;
 }
 
 #buttonPanel {
@@ -13,8 +19,9 @@ body {
 }
 
 .btn {
-  display: inline-block;
-  padding: 0 15px;
+  text-align: center;
+  display: block;
+  padding: 5px;
   line-height: 28px;
   border: 1px solid #aaaaaa;
   font-size: 10px;
