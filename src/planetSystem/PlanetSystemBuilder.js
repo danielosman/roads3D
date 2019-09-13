@@ -1,7 +1,7 @@
 import * as THREE from "three"
 import masses from './masses'
 
-const dt = 0.08
+const dt = 0.8
 const dSOrbit = 0.02
 const g = 0.0002959122082855900
 const au = 149597870.700

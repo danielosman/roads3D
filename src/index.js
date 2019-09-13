@@ -14,7 +14,7 @@ const raycaster = new THREE.Raycaster()
 const mouse = new THREE.Vector2()
 const sphereIntersection = new THREE.Vector3()
 
-const cameraSpherical = new THREE.Spherical(4000, Math.PI / 2, 0)
+const cameraSpherical = new THREE.Spherical(16000, Math.PI / 2, 0)
 camera.position.setFromSpherical(cameraSpherical)
 camera.lookAt(0, 0, 0)
 
