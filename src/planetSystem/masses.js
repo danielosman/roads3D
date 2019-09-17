@@ -12,7 +12,10 @@ export default [
     vz: -7.90076642683254e-7,
     //r: 695700,
     r: 10000,
-    gm: 132712440041.93938
+    gm: 132712440041.93938,
+    aphelion: 0,
+    perihelion: 0,
+    e: 0
   },
   {
     name: "Mercury",
@@ -26,7 +29,14 @@ export default [
     vz: -0.0021963604379369,
     r: 2440,
     gm: 22031.78,
-    md: 0.387
+    md: 0.387,
+    aphelion: 0.466697,
+    perihelion: 0.307499,
+    e: 0.205630,
+    anomaly: 174.796,
+    inclination: 3.38,
+    longitudeToAscendingNode: 48.331,
+    argumentOfPerihelion: 29.124
   },
   {
     name: "Venus",
@@ -40,7 +50,14 @@ export default [
     vz: -0.000422753026873945,
     r: 6051.84,
     gm: 324858.592,
-    md: 0.723
+    md: 0.723,
+    aphelion: 0.728213,
+    perihelion: 0.718440,
+    e: 0.006772,
+    anomaly: 50.115,
+    inclination: 3.86,
+    longitudeToAscendingNode: 76.680,
+    argumentOfPerihelion: 54.884
   },
   {
     name: "Earth",
@@ -54,7 +71,14 @@ export default [
     vz: -7.9433461700057E-08,
     r: 6371.01,
     gm: 398600.435436,
-    md: 1
+    md: 1,
+    aphelion: 1.017,
+    perihelion: 0.98327,
+    e: 0.0167086,
+    anomaly: 358.617,
+    inclination: 7.155,
+    longitudeToAscendingNode: -11.26064,
+    argumentOfPerihelion: 114.20783
   },
   {
     name: "Mars",
@@ -68,7 +92,14 @@ export default [
     vz: -0.000171904382646091,
     r: 3389.92,
     gm: 42828.375214,
-    md: 1.524
+    md: 1.524,
+    aphelion: 1.666,
+    perihelion: 1.382,
+    e: 0.0934,
+    anomaly: 358.617,
+    inclination: 5.65,
+    longitudeToAscendingNode: 49.558,
+    argumentOfPerihelion: 286.502
   },
   {
     // 2019-09-12
@@ -83,7 +114,14 @@ export default [
     vz: -1.661665564193456E-04,
     r: 71492,
     gm: 126686534.911,
-    md: 5.203
+    md: 5.203,
+    aphelion: 5.4588,
+    perihelion: 4.9501,
+    e: 0.0489,
+    anomaly: 20.020,
+    inclination: 6.09,
+    longitudeToAscendingNode: 100.464,
+    argumentOfPerihelion: 273.867
   },
   {
     // 2019-09-12
@@ -98,7 +136,14 @@ export default [
     vz: -2.293016450160127E-04,
     r: 60268,
     gm: 37931207.8,
-    md: 9.529
+    md: 9.529,
+    aphelion: 10.1238,
+    perihelion: 9.0412,
+    e: 0.0565,
+    anomaly: 317.020,
+    inclination: 5.51,
+    longitudeToAscendingNode: 113.665,
+    argumentOfPerihelion: 339.392
   },
   {
     // 2019-09-12
@@ -113,7 +158,14 @@ export default [
     vz: 4.019274772286954E-05,
     r: 25559,
     gm: 5793951.322,
-    md: 19.19
+    md: 19.19,
+    aphelion: 20.11,
+    perihelion: 18.33,
+    e: 0.046381,
+    anomaly: 142.238600,
+    inclination: 6.48,
+    longitudeToAscendingNode: 74.006,
+    argumentOfPerihelion: 96.998857
   },
   {
     // 2019-09-12
@@ -128,6 +180,13 @@ export default [
     vz: -7.908712065665146E-05,
     r: 24624,
     gm: 6835099.5,
-    md: 30.06
+    md: 30.06,
+    aphelion: 30.33,
+    perihelion: 29.81,
+    e: 0.009456,
+    anomaly: 256.228,
+    inclination: 6.43,
+    longitudeToAscendingNode: 131.784,
+    argumentOfPerihelion: 276.336
   }
 ]
