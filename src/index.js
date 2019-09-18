@@ -19,9 +19,17 @@ const raycaster = new THREE.Raycaster()
 const mouse = new THREE.Vector2()
 const sphereIntersection = new THREE.Vector3()
 
-const cameraSpherical = new THREE.Spherical(16000, Math.PI / 2, 0)
-camera.position.setFromSpherical(cameraSpherical)
+const cameraObjectParent = new THREE.Mesh()
+const cameraObjectChild = new THREE.Mesh()
+scene.add(cameraObjectParent)
+cameraObjectParent.add(cameraObjectChild)
+
+cameraObjectChild.position.set(0, 0, 20000)
+cameraObjectChild.updateMatrixWorld()
+camera.matrixAutoUpdate = false
+camera.position.applyMatrix4(cameraObjectChild.matrixWorld)
 camera.lookAt(0, 0, 0)
+camera.updateMatrix()
 
 const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5)
 const ambientLight = new THREE.AmbientLight( 0x909090 )
@@ -118,38 +126,52 @@ const keyHandler$ = Rx.merge(keydown$, keyup$).pipe(
   }, {})
 )
 
+let tiltAngle = 0
+let rotAngle = 0
+const xAxis = new THREE.Vector3(1, 0, 0)
+const zAxis = new THREE.Vector3(0, 0, 1)
+const qTilt = new THREE.Quaternion()
+const qRot = new THREE.Quaternion()
+
 const moveCamera = function(frame, keys) {
-  const rotateBy = 0.01
+  const rotateBy = 0.005
   const moveBy = 5
-  let phi = cameraSpherical.phi
-  let theta = cameraSpherical.theta
-  let x = camera.position.x
-  let y = camera.position.y
-  let z = camera.position.z
+  let x = cameraObjectParent.position.x
+  let y = cameraObjectParent.position.y
+  let z = cameraObjectParent.position.z
   if (keys.d) {
-    //theta += rotateBy
     x += moveBy
   }
   if (keys.a) {
-    //theta -= rotateBy
     x -= moveBy
   }
   if (keys.s) {
-    //phi += rotateBy
     y -= moveBy
   }
   if (keys.w) {
-    //phi -= rotateBy
     y += moveBy
   }
-  //cameraSpherical.phi = phi
-  //cameraSpherical.theta = theta
-  //cameraSpherical.makeSafe()
-  //camera.position.setFromSpherical(cameraSpherical)
-  //camera.lookAt(0, 0, 0)
-  camera.position.set(x, y, z)
-  camera.updateMatrixWorld()
-  //controls.update()
+  cameraObjectParent.position.set(x, y, z)
+  if (keys.r) {
+    tiltAngle -= rotateBy
+  }
+  if (keys.f) {
+    tiltAngle += rotateBy
+  }
+  if (keys.q) {
+    rotAngle -= rotateBy
+  }
+  if (keys.e) {
+    rotAngle += rotateBy
+  }
+  qTilt.setFromAxisAngle(xAxis, tiltAngle)
+  qRot.setFromAxisAngle(zAxis, rotAngle)
+  cameraObjectParent.quaternion.multiplyQuaternions(qRot, qTilt)
+  cameraObjectChild.updateMatrixWorld()
+  camera.position.set(0, 0, 0)
+  camera.position.applyMatrix4(cameraObjectChild.matrixWorld)
+  camera.quaternion.setFromRotationMatrix(cameraObjectChild.matrixWorld)
+  camera.updateMatrix()
   directionalLight.position.set(camera.position.x, camera.position.y, camera.position.z)
   directionalLight.lookAt(0, 0, 0)
 }
@@ -157,7 +179,6 @@ const moveCamera = function(frame, keys) {
 animation$.pipe(
   Op.withLatestFrom(keyHandler$, moveCamera),
   Op.tap(() => {
-    //controls.update()
     renderer.render(scene, camera)
   })
 ).subscribe()

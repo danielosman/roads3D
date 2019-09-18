@@ -36,31 +36,39 @@ export default function createPlanetSystem (scene, camera) {
   //spriteMaterial.sizeAttenuation = false
 
   masses.forEach((m, i) => {
-    const oa = (m.aphelion + m.perihelion) / 2
-    const oc = m.e * oa
-    const ob = oa * Math.sqrt(1 - (m.e * m.e))
-    const ellipseCurve = new THREE.EllipseCurve(
-      oc * viewDistanceScale,
-      0,
-      oa * viewDistanceScale,
-      ob * viewDistanceScale,
-      0,  2 * Math.PI, false, 0)
-    const ellipseGeometry = new THREE.BufferGeometry().setFromPoints(ellipseCurve.getPoints(50))
-    const ellipseMaterial = new THREE.LineBasicMaterial({ color: 0xff2222 })
-    const ellipse = new THREE.Line(ellipseGeometry, ellipseMaterial)
-    //const q1 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 4)
-    //const q2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2)
-    //q1.multiply(q2)
-    //ellipse.quaternion.copy(q1)
-    scene.add(ellipse)
-    m.x = -m.perihelion
-    m.y = 0
-    m.z = 0
-    m.vx = 0
-    m.vy = -Math.sqrt(g * (1 + m.e) / m.perihelion)
-    m.vz = 0
+    m.points = []
+    m.dS = dSOrbit
+    m.v = 0
+    m.T = 2 * Math.PI * Math.sqrt(m.md * m.md * m.md / g)
+    m.t = 0
+    m.orbitObjects = []
+    if (m.md > 0) {
+      const oa = (m.aphelion + m.perihelion) / 2
+      const oc = m.e * oa
+      const ob = oa * Math.sqrt(1 - (m.e * m.e))
+      const ellipseCurve = new THREE.EllipseCurve(
+        oc * viewDistanceScale,
+        0,
+        oa * viewDistanceScale,
+        ob * viewDistanceScale,
+        0, 2 * Math.PI, false, 0)
+      const ellipseGeometry = new THREE.BufferGeometry().setFromPoints(ellipseCurve.getPoints(Math.max(Math.ceil(2 * Math.PI * m.md), 64)))
+      const ellipseMaterial = new THREE.LineBasicMaterial({ color: 0xff2222 })
+      const ellipse = new THREE.Line(ellipseGeometry, ellipseMaterial)
+      //const q1 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 4)
+      //const q2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2)
+      //q1.multiply(q2)
+      //ellipse.quaternion.copy(q1)
+      scene.add(ellipse)
+      m.x = -m.perihelion
+      m.y = 0
+      m.z = 0
+      m.vx = 0
+      m.vy = -Math.sqrt(g * (1 + m.e) / m.perihelion)
+      m.vz = 0
+    }
 
-    const slices = 8 * Math.ceil(m.r / 8000) * Math.ceil(Math.log(1000 * viewMassScale))
+    const slices = 16
     const color = (i === 0) ? 0xffff00 : 0xdb780d
     const geometry = new THREE.SphereGeometry(m.r * viewMassScale, slices, slices)
     const material = new THREE.MeshLambertMaterial({ color })
@@ -75,13 +83,8 @@ export default function createPlanetSystem (scene, camera) {
     scene.add(sprite)
     */
     m.mesh = mesh
-    m.points = []
-    m.dS = dSOrbit
-    m.v = 0
-    m.T = 2 * Math.PI * Math.sqrt(m.md * m.md * m.md / g)
-    m.t = 0
-    m.orbitObjects = []
     scene.add(mesh)
+    console.log("m: ", m)
   })
 
   let show = false
