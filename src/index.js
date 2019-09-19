@@ -129,29 +129,14 @@ const keyHandler$ = Rx.merge(keydown$, keyup$).pipe(
 let tiltAngle = 0
 let rotAngle = 0
 const xAxis = new THREE.Vector3(1, 0, 0)
+const yAxis = new THREE.Vector3(0, 1, 0)
 const zAxis = new THREE.Vector3(0, 0, 1)
 const qTilt = new THREE.Quaternion()
 const qRot = new THREE.Quaternion()
 
 const moveCamera = function(frame, keys) {
-  const rotateBy = 0.005
-  const moveBy = 5
-  let x = cameraObjectParent.position.x
-  let y = cameraObjectParent.position.y
-  let z = cameraObjectParent.position.z
-  if (keys.d) {
-    x += moveBy
-  }
-  if (keys.a) {
-    x -= moveBy
-  }
-  if (keys.s) {
-    y -= moveBy
-  }
-  if (keys.w) {
-    y += moveBy
-  }
-  cameraObjectParent.position.set(x, y, z)
+  const rotateBy = 0.002
+  const moveBy = 10
   if (keys.r) {
     tiltAngle -= rotateBy
   }
@@ -164,9 +149,24 @@ const moveCamera = function(frame, keys) {
   if (keys.e) {
     rotAngle += rotateBy
   }
+  xAxis.set(1, 0, 0)
+  yAxis.set(0, 1, 0)
+  zAxis.set(0, 0, 1)
   qTilt.setFromAxisAngle(xAxis, tiltAngle)
   qRot.setFromAxisAngle(zAxis, rotAngle)
   cameraObjectParent.quaternion.multiplyQuaternions(qRot, qTilt)
+  xAxis.applyQuaternion(qRot)
+  yAxis.applyQuaternion(qRot)
+  if (keys.d) {
+    cameraObjectParent.position.addScaledVector(xAxis, moveBy)
+  } else if (keys.a) {
+    cameraObjectParent.position.addScaledVector(xAxis, -moveBy)
+  }
+  if (keys.s) {
+    cameraObjectParent.position.addScaledVector(yAxis, -moveBy)
+  } else if (keys.w) {
+    cameraObjectParent.position.addScaledVector(yAxis, moveBy)
+  }
   cameraObjectChild.updateMatrixWorld()
   camera.position.set(0, 0, 0)
   camera.position.applyMatrix4(cameraObjectChild.matrixWorld)

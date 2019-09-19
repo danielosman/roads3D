@@ -8,7 +8,7 @@ const g = 0.0002959122082855900
 const au = 149597870.700
 const viewMassScale = 0.01
 const viewDistanceScale = 1000
-const orbitMaterial = new THREE.LineBasicMaterial({ color : 0xab480d })
+const orbitMaterial = new THREE.LineDashedMaterial({ color : 0x5f585d, linewidth: 1, scale: 1, dashSize: 30, gapSize: 10 })
 
 export default function createPlanetSystem (scene, camera) {
   const sunLight = new THREE.PointLight(0xffffff)
@@ -53,8 +53,8 @@ export default function createPlanetSystem (scene, camera) {
         ob * viewDistanceScale,
         0, 2 * Math.PI, false, 0)
       const ellipseGeometry = new THREE.BufferGeometry().setFromPoints(ellipseCurve.getPoints(Math.max(Math.ceil(2 * Math.PI * m.md), 64)))
-      const ellipseMaterial = new THREE.LineBasicMaterial({ color: 0xff2222 })
-      const ellipse = new THREE.Line(ellipseGeometry, ellipseMaterial)
+      const ellipse = new THREE.Line(ellipseGeometry, orbitMaterial)
+      ellipse.computeLineDistances()
       //const q1 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 4)
       //const q2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2)
       //q1.multiply(q2)
@@ -113,6 +113,8 @@ export default function createPlanetSystem (scene, camera) {
             m.dS = 0
           }
         } else {
+          /*
+          // Orbit dashes
           const orbitGeometry = new THREE.BufferGeometry().setFromPoints(m.points)
           const orbitObject = new THREE.LineSegments(orbitGeometry, orbitMaterial)
           orbitObject.renderOrder = -20
@@ -123,6 +125,7 @@ export default function createPlanetSystem (scene, camera) {
             scene.remove(m.orbitObjects[0].orbitObject)
             m.orbitObjects.shift()
           }
+          */
           m.points = []
         }
 
