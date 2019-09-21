@@ -39,6 +39,13 @@ scene.add(ambientLight)
 
 renderer.setSize(canvas.w, canvas.h)
 
+const pointerOrbitMaterial = new THREE.LineBasicMaterial({ color: 0x909090 })
+const pointerOrbitCurve = new THREE.EllipseCurve(0, 0, 0, 0, 0,  2 * Math.PI, false, 0)
+const pointerOrbitPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1))
+const pointerOrbitGeometry = new THREE.BufferGeometry().setFromPoints(pointerOrbitCurve.getPoints(50))
+const pointerOrbit = new THREE.Line(pointerOrbitGeometry, pointerOrbitMaterial)
+scene.add(pointerOrbit)
+
 // DOM
 canvas.elem = document.getElementById('canvas')
 const cancelButton = document.getElementById('cancelButton')
@@ -206,6 +213,19 @@ const onZoom = function (event) {
   camera.position.set(x, y, z)
   camera.updateMatrixWorld()
 }
+
+mouseMove$.subscribe(e => {
+  mouse.x = (event.clientX / canvas.w) * 2 - 1
+  mouse.y = -(event.clientY / canvas.h) * 2 + 1
+  raycaster.setFromCamera(mouse, camera)
+  raycaster.ray.intersectPlane(pointerOrbitPlane, sphereIntersection)
+  if (sphereIntersection) {
+	  const dist = Math.sqrt(sphereIntersection.x * sphereIntersection.x + sphereIntersection.y * sphereIntersection.y + sphereIntersection.z * sphereIntersection.z)
+	  pointerOrbitCurve.xRadius = dist
+	  pointerOrbitCurve.yRadius = dist
+	  pointerOrbit.geometry.setFromPoints(pointerOrbitCurve.getPoints(50))
+  }
+})
 
 canvas.elem.addEventListener('contextmenu', onRightButton)
 canvas.elem.addEventListener('wheel', onZoom)
