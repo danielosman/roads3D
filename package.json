@@ -30,7 +30,7 @@
     "d3-quadtree": "^1.0.6",
     "d3-scale": "^2.2.2",
     "eventemitter3": "^3.1.2",
-    "express": "^4.17.1",
+    "express": "^4.17.3",
     "rxjs": "^6.5.3",
     "seedrandom": "^3.0.3",
     "three": "^0.108.0"
